@@ -271,7 +271,7 @@ function Proyeccion() {
                   )}
                   {/* Reloj en vivo (hora de Bogotá) */}
                   <div className="tabular rounded-full border-2 border-dorado bg-marino/70 px-6 py-1.5 text-[34px] font-black text-dorado-claro">
-                    🕐 {formatHora(ahora)}
+                    🕐 {formatHora(new Date(ahora))}
                   </div>
                 </div>
               </div>
