@@ -1,10 +1,19 @@
-import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useCallback, type ReactNode } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { usePendientes } from '../lib/pendientes';
+import { useToast } from './Toast';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { perfil, logout } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+  // Envía en segundo plano los registros guardados sin señal, en cualquier página del panel
+  const alEnviar = useCallback(
+    (n: number) => toast(`✓ ${n} registro${n > 1 ? 's' : ''} pendiente${n > 1 ? 's' : ''} enviado${n > 1 ? 's' : ''}`),
+    [toast],
+  );
+  const { pendientes } = usePendientes(true, alEnviar);
 
   const links = [
     { to: '/admin', label: 'Inicio', end: true },
@@ -54,6 +63,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
+        {pendientes.length > 0 && (
+          <Link to="/admin/registrar" className="block bg-dorado px-4 py-2 text-center text-sm font-extrabold text-marino">
+            ⏳ {pendientes.length} registro{pendientes.length > 1 ? 's' : ''} sin enviar · esperando señal
+          </Link>
+        )}
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-16 pt-4">{children}</main>
     </div>

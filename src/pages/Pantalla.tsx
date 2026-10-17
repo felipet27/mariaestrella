@@ -3,16 +3,20 @@ import { QRCodeSVG } from 'qrcode.react';
 import Termometro from '../components/Termometro';
 import Confeti from '../components/Confeti';
 import MenuProductos from '../components/MenuProductos';
-import BingosPanel from '../components/BingosPanel';
+import BingosPanel, { faltaGranBingo, mmss } from '../components/BingosPanel';
 import {
+  granBingo,
+  MENSAJES_HITO,
   useAhora,
   useAnimado,
   useBingosPublicos,
+  useCambioPorcentaje,
   useCelebracion,
   useConfigPublica,
   useMenu,
   useProgreso,
 } from '../lib/useProgreso';
+import { formatCOP } from '../lib/format';
 
 // Proyección. Se diseña sobre un lienzo fijo de 1920×1080 y se escala al
 // tamaño real de la pantalla (1080p o 720p se ven idénticos y nítidos).
@@ -111,7 +115,7 @@ export default function Pantalla() {
   const escala = useEscala();
   const cursor = useCursorVisible();
   useWakeLock();
-  const ahora = useAhora(20_000);
+  const ahora = useAhora(1000); // cada segundo: cuenta regresiva del Gran Bingo
 
   const { data: progreso, conectado } = useProgreso();
   const { data: config } = useConfigPublica();
@@ -122,6 +126,19 @@ export default function Pantalla() {
   const meta = progreso?.meta_alcanzada ?? false;
   const animado = useAnimado(pct, 2200);
   const celebrar = useCelebracion(progreso ? meta : undefined, 10_000);
+  const { subida, hito } = useCambioPorcentaje(progreso?.porcentaje);
+
+  // Franja inferior: la segunda línea rota cada 10 s
+  const frases = [
+    `🎟️ ${config?.instrucciones ?? 'Fichas y tablas de bingo en los Bancos 1, 2 y 3'}`,
+    '🙏 Cada ficha ayuda a terminar nuestra parroquia',
+    '📱 Escanee el código y siga el termómetro en vivo',
+  ];
+  const frase = frases[Math.floor(ahora / 10_000) % frases.length];
+
+  const falta = bingos ? faltaGranBingo(bingos, ahora) : null;
+  const gran = bingos ? granBingo(bingos) : undefined;
+  const conteoFinal = falta !== null && falta > 0 && falta <= 60_000;
 
   const destellos = useMemo(() => {
     // Posiciones fijas (pseudoaleatorias) para que no "salten" entre renders
@@ -140,6 +157,7 @@ export default function Pantalla() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#1a3670]" style={{ cursor: cursor ? 'default' : 'none' }}>
       <Confeti activo={celebrar} grande />
+      <Confeti activo={!!hito} />
 
       <div
         className="absolute left-1/2 top-1/2 overflow-hidden bg-real text-crema"
@@ -177,9 +195,20 @@ export default function Pantalla() {
 
               <div className="mt-4 flex min-h-0 flex-1 items-center">
                 <Termometro porcentaje={animado} lleno={meta} tema="oscuro" className="h-full max-h-[700px] w-auto shrink-0" />
-                <div className="ml-2 flex flex-col">
+                <div className="relative ml-2 flex flex-col">
+                  {subida && (
+                    <div
+                      key={subida.id}
+                      className="animar-subir pointer-events-none absolute -top-16 left-6 text-[64px] font-black text-dorado-claro drop-shadow-[0_4px_0_rgba(0,0,0,0.3)]"
+                    >
+                      +{subida.delta} %
+                    </div>
+                  )}
                   <div
-                    className="tabular font-sans font-black leading-[0.85] tracking-tight text-crema drop-shadow-[0_6px_0_rgba(0,0,0,0.25)]"
+                    key={subida?.id ?? 'pct'}
+                    className={`tabular origin-left font-sans font-black leading-[0.85] tracking-tight text-crema drop-shadow-[0_6px_0_rgba(0,0,0,0.25)] ${
+                      subida ? 'animar-pop' : ''
+                    }`}
                     style={{ fontSize: Math.round(animado) >= 100 ? 158 : 200 }}
                   >
                     {Math.round(animado)}
@@ -208,9 +237,8 @@ export default function Pantalla() {
               <div className="h-[230px] shrink-0">{bingos && <BingosPanel bingos={bingos} ahora={ahora} />}</div>
 
               <div className="mt-6 flex min-h-0 flex-1 flex-col rounded-[28px] border-[5px] border-dorado bg-crema px-[34px] pb-[18px] pt-[14px] text-marino shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
-                <div className="mb-2 flex items-baseline justify-between border-b-2 border-dorado/50 pb-1">
+                <div className="mb-2 border-b-2 border-dorado/50 pb-1">
                   <h2 className="font-serif text-[50px] font-bold leading-none text-real">Lista de precios</h2>
-                  <span className="text-[22px] font-semibold text-marino/70">Se paga con fichas</span>
                 </div>
                 <div className="min-h-0 flex-1">{menu && <MenuProductos productos={menu} maxFont={34} />}</div>
               </div>
@@ -223,8 +251,8 @@ export default function Pantalla() {
               <div className="truncate font-serif text-[42px] font-bold italic leading-tight text-dorado-claro">
                 {config?.causa ?? 'Para terminar de construir y reparar la parroquia'}
               </div>
-              <div className="mt-1 truncate text-[28px] font-semibold text-crema">
-                🎟️ {config?.instrucciones ?? 'Fichas y tablas de bingo en los Bancos 1, 2 y 3'}
+              <div key={frase} className="animar-entrar mt-1 truncate text-[28px] font-semibold text-crema">
+                {frase}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-4">
@@ -245,6 +273,33 @@ export default function Pantalla() {
           className={`absolute left-3 top-3 h-3 w-3 rounded-full ${conectado ? 'bg-emerald-400' : 'animate-pulse bg-rojo'}`}
           title={conectado ? 'En vivo' : 'Sin conexión'}
         />
+
+        {/* Hito 25 / 50 / 75 % (~6 s) */}
+        {hito && !celebrar && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div
+              key={hito.id}
+              className="animar-hito rounded-[40px] border-[6px] border-dorado-claro bg-gradient-to-br from-dorado via-dorado-claro to-dorado px-24 py-12 text-center text-marino shadow-[0_0_120px_rgba(242,207,107,0.8)]"
+            >
+              <div className="font-serif text-[120px] font-bold leading-none">{MENSAJES_HITO[hito.valor].titulo}</div>
+              <div className="mt-4 text-[44px] font-bold">{MENSAJES_HITO[hito.valor].sub}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Último minuto antes del Gran Bingo: conteo gigante */}
+        {conteoFinal && gran && !celebrar && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-marino/90 text-center">
+            <div className="font-serif text-[90px] font-bold leading-none text-dorado-claro">{gran.nombre}</div>
+            <div className="mt-2 text-[44px] font-bold text-crema">
+              Premio {gran.premio ? formatCOP(gran.premio) : gran.premio_texto}
+            </div>
+            <div className="tabular animar-latido mt-6 text-[340px] font-black leading-none text-dorado-claro drop-shadow-[0_0_60px_rgba(242,207,107,0.6)]">
+              {mmss(falta!)}
+            </div>
+            <div className="mt-4 text-[40px] font-bold text-crema">¡Alisten sus tablas!</div>
+          </div>
+        )}
 
         {/* Celebración al llegar a la meta (~10 s) */}
         {celebrar && (

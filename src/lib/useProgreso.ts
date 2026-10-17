@@ -73,6 +73,47 @@ export function useCelebracion(metaAlcanzada: boolean | undefined, duracionMs = 
   return celebrando;
 }
 
+/**
+ * Detecta cuándo sube el porcentaje (no al cargar la página):
+ * `subida` = cuántos puntos subió (para el "+1 %"), `hito` = 25 / 50 / 75 si se cruzó uno.
+ */
+export function useCambioPorcentaje(pct: number | undefined) {
+  const anterior = useRef<number | undefined>(undefined);
+  const [subida, setSubida] = useState<{ id: number; delta: number } | null>(null);
+  const [hito, setHito] = useState<{ id: number; valor: number } | null>(null);
+
+  useEffect(() => {
+    if (pct === undefined) return;
+    const antes = anterior.current;
+    anterior.current = pct;
+    if (antes === undefined || pct <= antes) return;
+
+    const id = Date.now();
+    setSubida({ id, delta: pct - antes });
+    window.setTimeout(() => setSubida((s) => (s?.id === id ? null : s)), 3200);
+
+    // Si salta varios hitos de una vez, se celebra el mayor. El 100 % tiene su propia celebración.
+    const cruzado = [75, 50, 25].find((m) => antes < m && pct >= m);
+    if (cruzado && pct < 100) {
+      setHito({ id, valor: cruzado });
+      window.setTimeout(() => setHito((h) => (h?.id === id ? null : h)), 6000);
+    }
+  }, [pct]);
+
+  return { subida, hito };
+}
+
+export const MENSAJES_HITO: Record<number, { titulo: string; sub: string }> = {
+  25: { titulo: '¡Ya vamos en el 25 %!', sub: 'Gracias a cada uno de ustedes' },
+  50: { titulo: '¡Vamos por la mitad!', sub: 'Sigamos construyendo nuestra parroquia' },
+  75: { titulo: '¡Ya casi! 75 %', sub: 'Falta poquito para la meta' },
+};
+
+/** El Gran Bingo: el de mayor premio. */
+export function granBingo<T extends { id: number; premio: number | null }>(bingos: T[]): T | undefined {
+  return [...bingos].sort((a, b) => (b.premio ?? 0) - (a.premio ?? 0))[0];
+}
+
 /** Interpola suavemente hacia `valor` (para que el termómetro "suba"). */
 export function useAnimado(valor: number, ms = 1600) {
   const [actual, setActual] = useState(0);

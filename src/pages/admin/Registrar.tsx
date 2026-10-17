@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Opcion, Tarjeta } from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import { useBancos } from '../../lib/useAdmin';
-import { mensajeError, supabase } from '../../lib/supabase';
-import { formatCOP, MEDIOS, TIPOS } from '../../lib/format';
+import { mensajeError } from '../../lib/supabase';
+import { formatCOP, formatHora, MEDIOS, TIPOS } from '../../lib/format';
+import { pesosEnLetras } from '../../lib/letras';
+import { agregarPendiente, enviarIngreso, esErrorDeRed, quitarPendiente, usePendientes } from '../../lib/pendientes';
 import type { MedioPago, TipoIngreso } from '../../lib/tipos';
 
 const LIMITE_DOBLE = 5_000_000;
@@ -21,6 +23,12 @@ export interface Precarga {
   corrige?: number;
 }
 
+interface Exito {
+  tipo: 'ok' | 'pendiente';
+  titulo: string;
+  detalle: string;
+}
+
 function leerBanco(): number | null {
   try {
     const v = localStorage.getItem(CLAVE_BANCO);
@@ -30,12 +38,39 @@ function leerBanco(): number | null {
   }
 }
 
+/** Confirmación grande de un segundo y medio: con ruido y prisa, un toast se pierde. */
+function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void }) {
+  useEffect(() => {
+    const t = window.setTimeout(onCerrar, exito.tipo === 'ok' ? 1600 : 3200);
+    return () => window.clearTimeout(t);
+  }, [exito, onCerrar]);
+
+  const ok = exito.tipo === 'ok';
+  return (
+    <button
+      type="button"
+      onClick={onCerrar}
+      className={`animar-entrar fixed inset-0 z-[70] flex flex-col items-center justify-center px-6 text-center ${
+        ok ? 'bg-verde text-white' : 'bg-dorado text-marino'
+      }`}
+    >
+      <div className="animar-pop flex h-32 w-32 items-center justify-center rounded-full bg-white/20 text-7xl font-black">
+        {ok ? '✓' : '⏳'}
+      </div>
+      <div className="mt-6 text-3xl font-black">{exito.titulo}</div>
+      <div className="mt-2 text-lg font-semibold opacity-90">{exito.detalle}</div>
+      <div className="mt-8 text-sm opacity-70">Toque para continuar</div>
+    </button>
+  );
+}
+
 export default function Registrar() {
   const toast = useToast();
   const loc = useLocation();
   const navigate = useNavigate();
   const precarga = (loc.state as { precarga?: Precarga } | null)?.precarga;
   const { data: bancos } = useBancos();
+  const { pendientes, sincronizar } = usePendientes();
 
   // El client_id se genera al ABRIR el formulario; un reintento usa el mismo (no duplica).
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
@@ -49,6 +84,10 @@ export default function Registrar() {
   const [paso, setPaso] = useState<0 | 1 | 2>(0); // 0 = editando, 1 = confirmar, 2 = segunda confirmación
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exito, setExito] = useState<Exito | null>(null);
+  const [descartar, setDescartar] = useState<string | null>(null);
+  const [reintentando, setReintentando] = useState(false);
+  const cerrarExito = useCallback(() => setExito(null), []);
 
   // Limpia el state de navegación para que recargar no vuelva a precargar
   useEffect(() => {
@@ -77,33 +116,44 @@ export default function Registrar() {
     if (!monto || !medio || guardando) return;
     setGuardando(true);
     setError(null);
-    try {
-      const { data, error } = await supabase.rpc('registrar_ingreso', {
-        p_client_id: clientId,
-        p_tipo: tipo,
-        p_banco_id: tipo === 'recaudo_banco' ? bancoId : null,
-        p_medio_pago: medio,
-        p_monto: monto,
-        p_descripcion: null,
-        p_nota: nota.trim() || null,
-      });
-      if (error) throw error;
-      navigator.vibrate?.(120);
-      toast(`Registro #${data} · ${formatCOP(monto)} · ${lugar}`);
-      if (tipo === 'recaudo_banco' && bancoId) {
-        try {
-          localStorage.setItem(CLAVE_BANCO, String(bancoId));
-        } catch {
-          /* sin almacenamiento */
-        }
+    const datos = {
+      client_id: clientId,
+      tipo,
+      banco_id: tipo === 'recaudo_banco' ? bancoId : null,
+      medio_pago: medio,
+      monto,
+      nota: nota.trim() || null,
+    };
+    if (tipo === 'recaudo_banco' && bancoId) {
+      try {
+        localStorage.setItem(CLAVE_BANCO, String(bancoId));
+      } catch {
+        /* sin almacenamiento */
       }
+    }
+    try {
+      const id = await enviarIngreso(datos);
+      navigator.vibrate?.(120);
+      setExito({ tipo: 'ok', titulo: `Registro #${id}`, detalle: `${formatCOP(monto)} · ${lugar}` });
       setPaso(0);
       limpiar();
     } catch (e) {
-      // NO se limpia el formulario: se conserva el client_id para reintentar sin duplicar
-      setError(mensajeError(e));
       setPaso(0);
-      navigator.vibrate?.([80, 60, 80]);
+      if (esErrorDeRed(e)) {
+        // Sin señal: queda guardado en el celular y se envía solo al volver la red
+        agregarPendiente({ ...datos, lugar, creado: new Date().toISOString() });
+        navigator.vibrate?.([80, 60, 80]);
+        setExito({
+          tipo: 'pendiente',
+          titulo: 'Guardado sin señal',
+          detalle: `${formatCOP(monto)} · ${lugar}. Se enviará solo cuando vuelva la conexión.`,
+        });
+        limpiar();
+      } else {
+        // Error del servidor: NO se limpia; se conserva el client_id para reintentar sin duplicar
+        setError(mensajeError(e));
+        navigator.vibrate?.([80, 60, 80]);
+      }
     } finally {
       setGuardando(false);
     }
@@ -114,9 +164,50 @@ export default function Registrar() {
     else guardar();
   };
 
+  const reintentarPendientes = async () => {
+    setReintentando(true);
+    const n = await sincronizar();
+    setReintentando(false);
+    if (n > 0) toast(`✓ ${n} registro${n > 1 ? 's' : ''} pendiente${n > 1 ? 's' : ''} enviado${n > 1 ? 's' : ''}`);
+    else toast('Todavía sin conexión. Se seguirá intentando solo.', 'info');
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold text-marino">Registrar ingreso</h1>
+
+      {pendientes.length > 0 && (
+        <div className="rounded-2xl border-2 border-dorado bg-dorado/15 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-extrabold">
+              ⏳ {pendientes.length} registro{pendientes.length > 1 ? 's' : ''} esperando señal
+            </p>
+            <button
+              type="button"
+              onClick={reintentarPendientes}
+              disabled={reintentando}
+              className="h-10 rounded-xl bg-dorado px-3 text-sm font-extrabold text-marino disabled:opacity-50"
+            >
+              {reintentando ? 'Enviando…' : 'Enviar ahora'}
+            </button>
+          </div>
+          <ul className="mt-2 space-y-1 text-sm">
+            {pendientes.map((p) => (
+              <li key={p.client_id} className="flex items-center justify-between gap-2">
+                <span>
+                  <b className="tabular">{formatCOP(p.monto)}</b> · {p.lugar} · {formatHora(p.creado)}
+                  {p.error && <span className="block text-xs font-semibold text-rojo">No se aceptó: {p.error}</span>}
+                </span>
+                <button type="button" onClick={() => setDescartar(p.client_id)} className="h-9 px-2 text-xs font-bold text-rojo">
+                  Descartar
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-marino/70">Se envían solos al volver la conexión. No cierre sesión en este celular.</p>
+        </div>
+      )}
+
       {corrige && (
         <p className="rounded-xl bg-dorado/20 px-3 py-2 text-sm font-semibold">
           Corrigiendo el registro #{corrige} (ya fue anulado). Revise los datos y guarde.
@@ -148,6 +239,7 @@ export default function Registrar() {
 
       <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 3 : 2}. Monto`}>
         <MontoInput valor={monto} onChange={setMonto} />
+        {monto ? <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(monto)}</p> : null}
       </Tarjeta>
 
       <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 4 : 3}. Medio de pago`}>
@@ -205,17 +297,34 @@ export default function Registrar() {
       >
         <div className="text-center">
           <div className="tabular text-5xl font-black leading-tight text-marino">{formatCOP(monto)}</div>
-          <div className="mt-2 text-lg font-semibold">
+          <div className="mt-1 text-lg font-bold capitalize text-real">{pesosEnLetras(monto)}</div>
+          <div className="mt-3 text-lg font-semibold">
             {lugar} · {medio ? MEDIOS[medio] : ''}
           </div>
           {nota.trim() && <div className="mt-1 text-sm text-marino/70">“{nota.trim()}”</div>}
           {paso === 2 && (
             <p className="mt-4 rounded-xl bg-rojo/10 p-3 font-bold text-rojo">
-              Verifique los ceros: son {formatCOP(monto)}. ¿Está seguro?
+              Verifique los ceros: son {pesosEnLetras(monto)}. ¿Está seguro?
             </p>
           )}
         </div>
       </ConfirmModal>
+
+      <ConfirmModal
+        abierto={!!descartar}
+        titulo="¿Descartar este registro pendiente?"
+        confirmar="Descartar"
+        peligro
+        onConfirmar={() => {
+          if (descartar) quitarPendiente(descartar);
+          setDescartar(null);
+        }}
+        onCancelar={() => setDescartar(null)}
+      >
+        <p>No se enviará. Úselo solo si se registró por error.</p>
+      </ConfirmModal>
+
+      {exito && <PantallaExito exito={exito} onCerrar={cerrarExito} />}
     </div>
   );
 }

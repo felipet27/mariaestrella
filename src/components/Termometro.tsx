@@ -10,16 +10,16 @@ interface Props {
   className?: string;
 }
 
-// Geometría en el viewBox 0 0 240 760
+// Geometría en el viewBox 0 0 256 760
 const CX = 110;
-const TUBO_X = 82;
-const TUBO_W = 56;
+const TUBO_X = 70;
+const TUBO_W = 80; // tubo ancho: se lee desde el fondo del salón
 const TUBO_TOP = 190; // y donde empieza el tubo (debajo de la estrella)
 const TUBO_BOTTOM = 640; // y donde el tubo se une al bulbo
 const LLENO_TOP = 206; // y que corresponde al 100 %
 const LLENO_BOTTOM = 632; // y que corresponde al 0 %
 const BULBO_CY = 682;
-const BULBO_R = 62;
+const BULBO_R = 70;
 const ESTRELLA_CY = 104;
 
 function puntosEstrella(cx: number, cy: number, R: number, r: number, puntas = 8) {
@@ -44,7 +44,7 @@ export default function Termometro({ porcentaje, lleno = false, tema = 'claro', 
 
   return (
     <svg
-      viewBox="0 0 240 760"
+      viewBox="0 0 256 760"
       className={className}
       role="img"
       aria-label={`Termómetro al ${Math.round(p)} por ciento`}
@@ -75,7 +75,7 @@ export default function Termometro({ porcentaje, lleno = false, tema = 'claro', 
           <rect x={TUBO_X + 8} y={TUBO_TOP + 8} width={TUBO_W - 16} height={TUBO_BOTTOM - TUBO_TOP + 20} rx={(TUBO_W - 16) / 2} />
         </clipPath>
         <clipPath id={`nivel-${id}`}>
-          <rect x="0" y={yNivel} width="240" height={760 - yNivel} />
+          <rect x="0" y={yNivel} width="256" height={760 - yNivel} />
         </clipPath>
       </defs>
 
@@ -110,7 +110,7 @@ export default function Termometro({ porcentaje, lleno = false, tema = 'claro', 
       <ellipse cx={CX - 18} cy={BULBO_CY - 20} rx="14" ry="9" fill="#fff" opacity="0.45" />
 
       {/* Reflejo del vidrio */}
-      <rect x={TUBO_X + 12} y={TUBO_TOP + 26} width="7" height={TUBO_BOTTOM - TUBO_TOP - 40} rx="3.5" fill="#fff" opacity="0.4" />
+      <rect x={TUBO_X + 16} y={TUBO_TOP + 26} width="9" height={TUBO_BOTTOM - TUBO_TOP - 40} rx="4.5" fill="#fff" opacity="0.4" />
 
       {/* Estrella de 8 puntas (encima del tubo) */}
       <g className={lleno ? 'animar-resplandor' : undefined}>
