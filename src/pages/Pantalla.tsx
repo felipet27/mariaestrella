@@ -16,7 +16,7 @@ import {
   useMenu,
   useProgreso,
 } from '../lib/useProgreso';
-import { formatCOP } from '../lib/format';
+import { formatCOP, formatHora } from '../lib/format';
 
 // Proyección. Se diseña sobre un lienzo fijo de 1920×1080 y se escala al
 // tamaño real de la pantalla (1080p o 720p se ven idénticos y nítidos).
@@ -128,16 +128,34 @@ export default function Pantalla() {
   const celebrar = useCelebracion(progreso ? meta : undefined, 10_000);
   const { subida, hito } = useCambioPorcentaje(progreso?.porcentaje);
 
-  // Franja inferior: la segunda línea rota cada 10 s
-  const frases = [
-    `🎟️ ${config?.instrucciones ?? 'Fichas y tablas de bingo en los Bancos 1, 2 y 3'}`,
-    '🙏 Cada ficha ayuda a terminar nuestra parroquia',
-    '📱 Escanee el código y siga el termómetro en vivo',
-  ];
-  const frase = frases[Math.floor(ahora / 10_000) % frases.length];
-
   const falta = bingos ? faltaGranBingo(bingos, ahora) : null;
   const gran = bingos ? granBingo(bingos) : undefined;
+
+  // Franja inferior: frases fijas + frases en vivo; rotan cada 8 s
+  const vuelta = Math.floor(ahora / 8000);
+  const proximoBingo = bingos?.find((b) => b.estado === 'programado' && b.id !== gran?.id);
+  const disponibles = (menu ?? []).filter((p) => !p.agotado && p.categoria !== 'otro');
+  const premio = (b: { premio: number | null; premio_texto: string | null }) =>
+    b.premio ? formatCOP(b.premio) : b.premio_texto ?? '';
+  const frases = [
+    '🎟️ Pregunte por las tablas de bingo en los Bancos 1, 2 y 3',
+    meta ? '🎉 ¡Llegamos a la meta! Gracias, San Isidro' : `🌡️ ¡Ya vamos en el ${pct} %! Ayúdenos a llegar a la meta`,
+    '🪙 Cambie sus fichas en los Bancos 1, 2 y 3',
+    proximoBingo && `🎱 Próximo: ${proximoBingo.nombre} con premio de ${premio(proximoBingo)}. ¡Pregunte por su tabla!`,
+    '🙏 Cada ficha ayuda a terminar nuestra parroquia',
+    gran?.hora && gran.estado === 'programado' && `⭐ ${gran.nombre} a las ${formatHora(gran.hora)}: ¡${premio(gran)} de premio!`,
+    '🛍️ Visite el Almacén: ¡hay de todo!',
+    disponibles.length > 0 &&
+      (() => {
+        // Un producto distinto en cada vuelta completa de frases
+        const p = disponibles[Math.floor(vuelta / 11) % disponibles.length];
+        return `😋 Hoy hay ${p.nombre.toLowerCase()}: ${formatCOP(p.precio)}`;
+      })(),
+    '⛪ Juntos estamos construyendo la casa de Dios',
+    '📱 Escanee el código y siga el termómetro desde su celular',
+    '💛 Comparta el termómetro con su familia por WhatsApp',
+  ].filter((f): f is string => Boolean(f));
+  const frase = frases[vuelta % frases.length];
   const conteoFinal = falta !== null && falta > 0 && falta <= 60_000;
 
   const destellos = useMemo(() => {
