@@ -78,22 +78,12 @@ export default function Inicio() {
         <div className="grid grid-cols-2 gap-2">
           <Cifra etiqueta="Neto real" valor={formatCOP(b.neto)} destacado />
           <Cifra etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} />
-          <Cifra etiqueta="Premios entregados" valor={`− ${formatCOP(b.premios_entregados)}`} tono="rojo" />
           <Cifra etiqueta="Meta" valor={formatCOP(b.meta)} />
           <Cifra etiqueta="Avance (público)" valor={`${Math.min(100, pct)} %${pct > 100 ? ` (real ${pct} %)` : ''}`} />
           {metaCumplida ? (
             <Cifra etiqueta="Meta cumplida · excedente" valor={`+ ${formatCOP(b.excedente)}`} tono="verde" />
           ) : (
             <Cifra etiqueta="Faltante" valor={formatCOP(b.faltante)} />
-          )}
-          {b.premios_totales - b.premios_entregados > 0 ? (
-            <Cifra
-              etiqueta="Premios por entregar"
-              valor={formatCOP(b.premios_totales - b.premios_entregados)}
-              nota={`Neto final estimado: ${formatCOP(b.neto_proyectado)}`}
-            />
-          ) : (
-            <Cifra etiqueta="Premios" valor="✓ Todos entregados" tono="verde" />
           )}
         </div>
       )}
