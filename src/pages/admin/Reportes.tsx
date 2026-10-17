@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
-import { useBancos, useBingosAdmin, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
+import { useBancos, useBingosAdmin, usePerfiles, useProductosAdmin, nombrePerfil } from '../../lib/useAdmin';
+import { claveItem, nombreItem } from '../../lib/conceptos';
 import { useLiveQuery } from '../../lib/useLiveQuery';
 import { mensajeError, q, supabase } from '../../lib/supabase';
 import { formatCOP, formatHora, horaBogota, plural, TIPOS } from '../../lib/format';
 import { CATEGORIAS_AUDITORIA, describirAuditoria, type CategoriaAuditoria, type EventoAuditoria } from '../../lib/auditoria';
 import { descargarReporteExcel } from '../../lib/excel';
-import type { Auditoria, Balance, Ingreso } from '../../lib/tipos';
+import type { Auditoria, Balance, Banco, Ingreso, Producto } from '../../lib/tipos';
 
 interface Datos {
   ingresos: Ingreso[];
@@ -136,11 +137,68 @@ function Actividad({ eventos }: { eventos: EventoAuditoria[] }) {
   );
 }
 
+/** Cuánto dejó cada producto y de qué banco vino. Toque un producto para ver el detalle. */
+function PorProducto({ ingresos, productos, bancos }: { ingresos: Ingreso[]; productos: Producto[]; bancos: Banco[] }) {
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const grupos = useMemo(() => {
+    const m = new Map<string, { nombre: string; total: number; registros: number; porBanco: Map<number, number> }>();
+    for (const i of ingresos) {
+      const k = claveItem(i);
+      const g = m.get(k) ?? { nombre: nombreItem(i, productos), total: 0, registros: 0, porBanco: new Map() };
+      g.total += Number(i.monto);
+      g.registros += 1;
+      if (i.banco_id) g.porBanco.set(i.banco_id, (g.porBanco.get(i.banco_id) ?? 0) + Number(i.monto));
+      m.set(k, g);
+    }
+    return [...m.entries()].sort((a, b) => b[1].total - a[1].total);
+  }, [ingresos, productos]);
+
+  if (!grupos.length) return <p className="text-sm text-marino/60">Todavía no hay recaudos de banco.</p>;
+  const max = Math.max(...grupos.map(([, g]) => g.total));
+  const nombreBanco = (id: number) => bancos.find((b) => b.id === id)?.nombre ?? `Punto ${id}`;
+
+  return (
+    <ul className="divide-y divide-marino/10">
+      {grupos.map(([k, g]) => (
+        <li key={k} className="py-2">
+          <button type="button" onClick={() => setAbierto(abierto === k ? null : k)} className="w-full text-left" aria-expanded={abierto === k}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="min-w-0 truncate font-semibold">{g.nombre}</span>
+              <span className="tabular shrink-0 font-black">{formatCOP(g.total)}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="h-1.5 flex-1 rounded-full bg-marino/5">
+                <div className="h-1.5 rounded-full bg-dorado" style={{ width: `${(g.total / max) * 100}%` }} />
+              </div>
+              <span className="shrink-0 text-[11px] text-marino/55">
+                {plural(g.registros, 'registro')} {abierto === k ? '▲' : '▼'}
+              </span>
+            </div>
+          </button>
+          {abierto === k && (
+            <ul className="animar-entrar mt-2 space-y-0.5 rounded-lg bg-crema/70 px-3 py-2 text-sm">
+              {[...g.porBanco.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([bid, t]) => (
+                  <li key={bid} className="flex justify-between">
+                    <span>{nombreBanco(bid)}</span>
+                    <b className="tabular">{formatCOP(t)}</b>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Reportes() {
   const toast = useToast();
   const { data: perfiles } = usePerfiles();
   const { data: bancos } = useBancos();
   const { data: bingos } = useBingosAdmin();
+  const { data: productos } = useProductosAdmin();
   const [descargando, setDescargando] = useState(false);
   const { data, error } = useLiveQuery<Datos>(
     ['ingresos', 'bingos', 'productos'],
@@ -162,10 +220,11 @@ export default function Reportes() {
           describirAuditoria(a, {
             nombreUsuario: (id) => nombrePerfil(perfiles, id),
             nombreBanco: (id) => bancos?.find((b) => b.id === id)?.nombre ?? 'banco',
+            nombreItem: (f) => nombreItem(f as Pick<Ingreso, 'concepto' | 'producto_id'>, productos, false),
           }),
         )
         .filter((e): e is EventoAuditoria => e !== null),
-    [data?.auditoria, perfiles, bancos],
+    [data?.auditoria, perfiles, bancos, productos],
   );
 
   if (!data) return error ? <p className="font-semibold text-rojo">{error}</p> : <Cargando />;
@@ -183,6 +242,7 @@ export default function Reportes() {
         bancos: bancos ?? [],
         perfiles: perfiles ?? [],
         bingos: bingos ?? [],
+        productos: productos ?? [],
         eventos,
       });
       toast('✓ Reporte descargado');
@@ -202,8 +262,8 @@ export default function Reportes() {
           sistema.
         </p>
         <p className="mt-1.5">
-          Al final del evento toque <b>Descargar reporte en Excel</b>. El archivo trae varias hojas: Resumen, Ingresos, Por hora,
-          Bingos y Actividad. Sirve de respaldo y para entregar las cuentas.
+          Al final del evento toque <b>Descargar reporte en Excel</b>. El archivo trae varias hojas: Resumen, Por producto, Ingresos,
+          Por hora, Bingos y Actividad. Sirve de respaldo y para entregar las cuentas.
         </p>
       </GuiaRapida>
 
@@ -214,7 +274,7 @@ export default function Reportes() {
         className="flex h-16 w-full flex-col items-center justify-center rounded-2xl bg-verde text-lg font-extrabold text-white shadow-md disabled:opacity-60"
       >
         {descargando ? 'Generando…' : '⬇ Descargar reporte en Excel'}
-        <span className="text-xs font-semibold text-white/80">Resumen, ingresos, por hora, bingos y actividad</span>
+        <span className="text-xs font-semibold text-white/80">Resumen, por producto, ingresos, por hora, bingos y actividad</span>
       </button>
 
       {b && (
@@ -258,6 +318,10 @@ export default function Reportes() {
         })}
         <Fila etiqueta="Total efectivo" valor={formatCOP(suma(validos.filter((i) => i.medio_pago === 'efectivo')))} />
         <Fila etiqueta="Total transferencia" valor={formatCOP(suma(validos.filter((i) => i.medio_pago === 'transferencia')))} />
+      </Tarjeta>
+
+      <Tarjeta titulo="Por producto (recaudo de bancos)">
+        <PorProducto ingresos={validos.filter((i) => i.tipo === 'recaudo_banco')} productos={productos ?? []} bancos={bancos ?? []} />
       </Tarjeta>
 
       <Tarjeta titulo="Por punto">

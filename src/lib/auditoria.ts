@@ -35,6 +35,8 @@ const MEDIO: Record<string, string> = { efectivo: 'efectivo', transferencia: 'tr
 interface Contexto {
   nombreUsuario: (id: string | null) => string;
   nombreBanco: (id: number | null) => string;
+  /** Nombre del producto del desglose ("Tamales"); vacío si es general */
+  nombreItem?: (fila: Fila) => string;
 }
 
 function lugarIngreso(f: Fila, ctx: Contexto) {
@@ -64,11 +66,12 @@ export function describirAuditoria(a: Auditoria, ctx: Contexto): EventoAuditoria
 
     case 'ingresos': {
       if (a.accion === 'INSERT') {
+        const item = despues.tipo === 'recaudo_banco' && despues.concepto && despues.concepto !== 'general' ? ctx.nombreItem?.(despues) : '';
         return {
           ...base,
           icono: '💵',
           categoria: 'dinero',
-          texto: `registró ${cop(despues.monto)} ${lugarIngreso(despues, ctx)} (${MEDIO[txt(despues.medio_pago)] ?? ''}) · registro #${txt(despues.id)}`,
+          texto: `registró ${cop(despues.monto)}${item ? ` de ${item}` : ''} ${lugarIngreso(despues, ctx)} (${MEDIO[txt(despues.medio_pago)] ?? ''}) · registro #${txt(despues.id)}`,
           detalle: despues.nota ? `Nota: ${txt(despues.nota)}` : undefined,
         };
       }

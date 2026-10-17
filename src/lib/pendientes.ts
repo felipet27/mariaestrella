@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import type { MedioPago, TipoIngreso } from './tipos';
+import type { Concepto, MedioPago, TipoIngreso } from './tipos';
 
 /**
  * Cola de registros sin conexión. Si no hay señal al registrar, el ingreso se
@@ -14,6 +14,9 @@ export interface Pendiente {
   medio_pago: MedioPago;
   monto: number;
   nota: string | null;
+  /** Desglose: de qué fue (solo recaudos de banco) */
+  concepto?: Concepto;
+  producto_id?: number | null;
   lugar: string;
   creado: string;
   error?: string;
@@ -56,7 +59,7 @@ export function esErrorDeRed(e: unknown): boolean {
 }
 
 export async function enviarIngreso(p: Omit<Pendiente, 'lugar' | 'creado' | 'error'>): Promise<number> {
-  const { data, error } = await supabase.rpc('registrar_ingreso', {
+  const args: Record<string, unknown> = {
     p_client_id: p.client_id,
     p_tipo: p.tipo,
     p_banco_id: p.tipo === 'recaudo_banco' ? p.banco_id : null,
@@ -64,7 +67,13 @@ export async function enviarIngreso(p: Omit<Pendiente, 'lugar' | 'creado' | 'err
     p_monto: p.monto,
     p_descripcion: null,
     p_nota: p.nota,
-  });
+  };
+  // El desglose solo se envía cuando hay uno: así "general" funciona con o sin el SQL 005
+  if (p.tipo === 'recaudo_banco' && p.concepto && p.concepto !== 'general') {
+    args.p_concepto = p.concepto;
+    args.p_producto_id = p.concepto === 'producto' ? p.producto_id : null;
+  }
+  const { data, error } = await supabase.rpc('registrar_ingreso', args);
   if (error) throw error;
   return data as number;
 }

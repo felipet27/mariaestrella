@@ -5,7 +5,8 @@ import { GuiaRapida } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
-import { useBancos, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
+import { useBancos, usePerfiles, useProductosAdmin, nombrePerfil } from '../../lib/useAdmin';
+import { claveItem, nombreItem } from '../../lib/conceptos';
 import { useLiveQuery } from '../../lib/useLiveQuery';
 import { mensajeError, q, supabase } from '../../lib/supabase';
 import { formatCOP, formatFechaHora, formatHora, MEDIOS, TIPOS } from '../../lib/format';
@@ -20,6 +21,7 @@ export default function Historial() {
   const navigate = useNavigate();
   const { data: perfiles } = usePerfiles();
   const { data: bancos } = useBancos();
+  const { data: productos } = useProductosAdmin();
   const { data: ingresos, error, refetch } = useLiveQuery<Ingreso[]>(['ingresos'], () =>
     q(supabase.from('ingresos').select('*').order('registrado_en', { ascending: false }).limit(1000)),
   );
@@ -28,6 +30,7 @@ export default function Historial() {
   const [fBanco, setFBanco] = useState('');
   const [fUsuario, setFUsuario] = useState('');
   const [fMedio, setFMedio] = useState('');
+  const [fItem, setFItem] = useState('');
   const [conAnulados, setConAnulados] = useState(false);
 
   const [anular, setAnular] = useState<{ ingreso: Ingreso; corregir: boolean } | null>(null);
@@ -44,10 +47,17 @@ export default function Historial() {
           (!fTipo || i.tipo === fTipo) &&
           (!fBanco || String(i.banco_id) === fBanco) &&
           (!fUsuario || i.registrado_por === fUsuario) &&
-          (!fMedio || i.medio_pago === fMedio),
+          (!fMedio || i.medio_pago === fMedio) &&
+          (!fItem || (i.tipo === 'recaudo_banco' && claveItem(i) === fItem)),
       ),
-    [ingresos, conAnulados, fTipo, fBanco, fUsuario, fMedio],
+    [ingresos, conAnulados, fTipo, fBanco, fUsuario, fMedio, fItem],
   );
+  // Productos que aparecen en algún registro (para el filtro)
+  const itemsUsados = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const i of ingresos ?? []) if (i.tipo === 'recaudo_banco') m.set(claveItem(i), nombreItem(i, productos));
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [ingresos, productos]);
   const total = lista.filter((i) => !i.anulada).reduce((s, i) => s + Number(i.monto), 0);
 
   const confirmarAnular = async () => {
@@ -68,6 +78,8 @@ export default function Historial() {
           medio_pago: i.medio_pago,
           monto: Number(i.monto),
           nota: i.nota,
+          concepto: i.concepto ?? 'general',
+          producto_id: i.producto_id ?? null,
           corrige: i.id,
         };
         navigate('/admin/registrar', { state: { precarga } });
@@ -138,6 +150,14 @@ export default function Historial() {
             </option>
           ))}
         </select>
+        <select value={fItem} onChange={(e) => setFItem(e.target.value)} className={`${sel} col-span-2 sm:col-span-4`}>
+          <option value="">Todos los productos</option>
+          {itemsUsados.map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
       </div>
       <label className="flex items-center gap-2 text-sm font-semibold">
         <input type="checkbox" checked={conAnulados} onChange={(e) => setConAnulados(e.target.checked)} className="h-5 w-5" />
@@ -159,6 +179,9 @@ export default function Historial() {
                 <span className="text-xs font-bold text-marino/50">#{i.id}</span>{' '}
                 <span className="font-bold">{i.tipo === 'recaudo_banco' ? nombreBanco(i.banco_id) : TIPOS[i.tipo]}</span>
                 <span className="text-sm text-marino/70"> · {MEDIOS[i.medio_pago]}</span>
+                {i.tipo === 'recaudo_banco' && (
+                  <span className="mt-0.5 block text-sm font-semibold text-real">{nombreItem(i, productos)}</span>
+                )}
               </div>
               <div className={`tabular text-xl font-black ${i.anulada ? 'line-through' : ''}`}>{formatCOP(i.monto)}</div>
             </div>

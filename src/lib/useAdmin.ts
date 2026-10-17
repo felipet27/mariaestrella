@@ -1,6 +1,6 @@
 import { q, supabase } from './supabase';
 import { useLiveQuery } from './useLiveQuery';
-import type { Balance, Banco, Bingo, Perfil, ResumenBanco, ResumenTipo } from './tipos';
+import type { Balance, Banco, Bingo, Perfil, Producto, ResumenBanco, ResumenTipo } from './tipos';
 
 export function usePerfiles() {
   return useLiveQuery<Perfil[]>(['perfiles'], () => q(supabase.from('perfiles').select('id, usuario, nombre, rol, activo')), {
@@ -10,6 +10,13 @@ export function usePerfiles() {
 
 export function useBancos() {
   return useLiveQuery<Banco[]>(['bancos'], () => q(supabase.from('bancos').select('*').order('id')), { intervalo: 120_000 });
+}
+
+/** Todos los productos (también ocultos), para el desglose y los reportes. */
+export function useProductosAdmin() {
+  return useLiveQuery<Producto[]>(['productos'], () =>
+    q(supabase.from('productos').select('id, nombre, precio, categoria, emoji, orden, agotado, activo').order('orden').order('nombre')),
+  );
 }
 
 export function useBingosAdmin() {

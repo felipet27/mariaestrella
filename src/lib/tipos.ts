@@ -73,7 +73,12 @@ export interface Ingreso {
   anulada_por: string | null;
   anulada_en: string | null;
   motivo_anulacion: string | null;
+  /** Desglose (005): de qué fue el recaudo. Puede no existir en datos viejos. */
+  producto_id?: number | null;
+  concepto?: Concepto;
 }
+
+export type Concepto = 'general' | 'producto' | 'tablas_bingo';
 
 export interface Banco {
   id: number;

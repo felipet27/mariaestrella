@@ -3,7 +3,8 @@
 import { formatFechaHora, formatHora, horaBogota, MEDIOS, TIPOS } from './format';
 import type { EventoAuditoria } from './auditoria';
 import { CATEGORIAS_AUDITORIA } from './auditoria';
-import type { Balance, Banco, Bingo, Ingreso, Perfil } from './tipos';
+import { claveItem, nombreItem } from './conceptos';
+import type { Balance, Banco, Bingo, Ingreso, Perfil, Producto } from './tipos';
 
 type Celda = string | number | null | { value: string | number | null; [k: string]: unknown };
 type Hoja = Celda[][];
@@ -29,6 +30,7 @@ export interface DatosReporte {
   bancos: Banco[];
   perfiles: Perfil[];
   bingos: Bingo[];
+  productos: Producto[];
   eventos: EventoAuditoria[];
 }
 
@@ -96,12 +98,13 @@ export async function descargarReporteExcel(d: DatosReporte) {
 
   // ---------- Hoja 2: Ingresos ----------
   const ingresos: Hoja = [
-    ['#', 'Fecha y hora', 'Tipo', 'Punto', 'Medio', 'Monto', 'Nota', 'Registró', 'Estado', 'Anulado por', 'Motivo de anulación'].map(encabezado),
+    ['#', 'Fecha y hora', 'Tipo', 'Punto', 'Producto', 'Medio', 'Monto', 'Nota', 'Registró', 'Estado', 'Anulado por', 'Motivo de anulación'].map(encabezado),
     ...d.ingresos.map((i): Celda[] => [
       i.id,
       formatFechaHora(i.registrado_en),
       TIPOS[i.tipo],
       i.tipo === 'recaudo_banco' ? nombreBanco(i.banco_id) : '',
+      i.tipo === 'recaudo_banco' ? nombreItem(i, d.productos, false) : '',
       MEDIOS[i.medio_pago],
       plata(i.monto, i.anulada ? { textColor: '#999999' } : {}),
       i.nota ?? '',
@@ -110,6 +113,35 @@ export async function descargarReporteExcel(d: DatosReporte) {
       i.anulada ? nombreUsuario(i.anulada_por) : '',
       i.motivo_anulacion ?? '',
     ]),
+  ];
+
+  // ---------- Hoja: Por producto (producto × punto) ----------
+  const deBancos = validos.filter((i) => i.tipo === 'recaudo_banco');
+  const puntos = d.bancos.filter((bn) => deBancos.some((i) => i.banco_id === bn.id));
+  const items = new Map<string, { nombre: string; filas: Ingreso[] }>();
+  for (const i of deBancos) {
+    const k = claveItem(i);
+    const g = items.get(k) ?? { nombre: nombreItem(i, d.productos, false), filas: [] };
+    g.filas.push(i);
+    items.set(k, g);
+  }
+  const ordenados = [...items.values()].sort((x, y) => suma(y.filas) - suma(x.filas));
+  const porProducto: Hoja = [
+    [titulo('Recaudo de bancos por producto')],
+    [],
+    [encabezado('Producto'), ...puntos.map((bn) => encabezado(bn.nombre)), encabezado('Registros'), encabezado('Total')],
+    ...ordenados.map((g): Celda[] => [
+      g.nombre,
+      ...puntos.map((bn) => plata(suma(g.filas.filter((i) => i.banco_id === bn.id)))),
+      g.filas.length,
+      total(suma(g.filas)),
+    ]),
+    [
+      negrita('Total'),
+      ...puntos.map((bn) => total(suma(deBancos.filter((i) => i.banco_id === bn.id)))),
+      { value: deBancos.length, fontWeight: 'bold', backgroundColor: CREMA },
+      total(suma(deBancos)),
+    ],
   ];
 
   // ---------- Hoja 3: Por hora ----------
@@ -161,7 +193,8 @@ export async function descargarReporteExcel(d: DatosReporte) {
   const blob = await writeXlsxFile(
     [
       { data: resumen, sheet: 'Resumen', columns: ancho(38, 12, 16, 16, 16) },
-      { data: ingresos, sheet: 'Ingresos', columns: ancho(6, 24, 12, 12, 14, 14, 30, 12, 10, 12, 30), stickyRowsCount: 1 },
+      { data: porProducto, sheet: 'Por producto', columns: ancho(30, ...puntos.map(() => 14), 11, 16), stickyColumnsCount: 1 },
+      { data: ingresos, sheet: 'Ingresos', columns: ancho(6, 24, 12, 12, 24, 14, 14, 30, 12, 10, 12, 30), stickyRowsCount: 1 },
       { data: horas, sheet: 'Por hora', columns: ancho(14, 12, 16), stickyRowsCount: 1 },
       { data: bingos, sheet: 'Bingos', columns: ancho(14, 16, 16, 12, 14, 14, 14), stickyRowsCount: 1 },
       { data: actividad, sheet: 'Actividad', columns: ancho(24, 12, 12, 70, 40), stickyRowsCount: 1 },

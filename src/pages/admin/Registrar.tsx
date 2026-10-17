@@ -4,12 +4,13 @@ import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
 import { GuiaRapida, Opcion, Tarjeta } from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
-import { useBancos } from '../../lib/useAdmin';
+import { useBancos, useProductosAdmin } from '../../lib/useAdmin';
 import { mensajeError } from '../../lib/supabase';
-import { formatCOP, formatHora, MEDIOS, TIPOS } from '../../lib/format';
+import { CATEGORIAS, formatCOP, formatHora, formatMiles, MEDIOS, TIPOS } from '../../lib/format';
 import { pesosEnLetras } from '../../lib/letras';
+import { nombreItem, type Item } from '../../lib/conceptos';
 import { agregarPendiente, enviarIngreso, esErrorDeRed, quitarPendiente, usePendientes } from '../../lib/pendientes';
-import type { MedioPago, TipoIngreso } from '../../lib/tipos';
+import type { Categoria, Concepto, MedioPago, Producto, TipoIngreso } from '../../lib/tipos';
 
 const SUB_TIPO: Record<TipoIngreso, string> = {
   recaudo_banco: 'Dinero recogido en un banco o el Almacén',
@@ -31,6 +32,8 @@ export interface Precarga {
   medio_pago: MedioPago;
   monto: number;
   nota: string | null;
+  concepto?: Concepto;
+  producto_id?: number | null;
   corrige?: number;
 }
 
@@ -39,6 +42,23 @@ interface Exito {
   titulo: string;
   detalle: string;
 }
+
+/** Una línea del desglose: qué se vendió y cuánto. El client_id nace con la línea (reintentos sin duplicar). */
+interface Linea {
+  clientId: string;
+  item: Item | null;
+  monto: number | null;
+}
+
+const nuevaLinea = (item: Item | null = null, monto: number | null = null): Linea => ({
+  clientId: crypto.randomUUID(),
+  item,
+  monto,
+});
+
+const valorItem = (i: Item | null) => (!i ? '' : i.concepto === 'producto' ? `p:${i.producto_id}` : i.concepto);
+const itemDesdeValor = (v: string): Item | null =>
+  !v ? null : v.startsWith('p:') ? { concepto: 'producto', producto_id: Number(v.slice(2)) } : { concepto: v as Concepto, producto_id: null };
 
 function leerBanco(): number | null {
   try {
@@ -52,7 +72,7 @@ function leerBanco(): number | null {
 /** Confirmación grande de un segundo y medio: con ruido y prisa, un toast se pierde. */
 function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void }) {
   useEffect(() => {
-    const t = window.setTimeout(onCerrar, exito.tipo === 'ok' ? 1600 : 3200);
+    const t = window.setTimeout(onCerrar, exito.tipo === 'ok' ? 1800 : 3200);
     return () => window.clearTimeout(t);
   }, [exito, onCerrar]);
 
@@ -75,22 +95,83 @@ function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void
   );
 }
 
+/** Selector de producto agrupado por categoría (usa el selector nativo del celular). */
+function SelectorItem({ valor, onChange, productos }: { valor: Item | null; onChange: (i: Item | null) => void; productos: Producto[] }) {
+  return (
+    <select
+      value={valorItem(valor)}
+      onChange={(e) => onChange(itemDesdeValor(e.target.value))}
+      className={`h-12 w-full min-w-0 rounded-xl border-2 bg-white px-2 text-base font-semibold outline-none focus:border-dorado ${
+        valor ? 'border-dorado/50 text-marino' : 'border-rojo/40 text-marino/50'
+      }`}
+    >
+      <option value="">Elija qué vendió…</option>
+      <optgroup label="Especiales">
+        <option value="tablas_bingo">🎟️ Tablas de bingo</option>
+        <option value="general">📦 General (sin detalle)</option>
+      </optgroup>
+      {(Object.keys(CATEGORIAS) as Categoria[]).map((cat) => {
+        const items = productos.filter((p) => p.categoria === cat);
+        if (!items.length) return null;
+        return (
+          <optgroup key={cat} label={CATEGORIAS[cat]}>
+            {items.map((p) => (
+              <option key={p.id} value={`p:${p.id}`}>
+                {p.emoji ? `${p.emoji} ` : ''}
+                {p.nombre}
+              </option>
+            ))}
+          </optgroup>
+        );
+      })}
+    </select>
+  );
+}
+
+/** Campo de monto compacto para las líneas del desglose. */
+function MontoLinea({ valor, onChange }: { valor: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <div className="flex h-12 items-center rounded-xl border-2 border-dorado/50 bg-white px-2 focus-within:border-dorado">
+      <span className="mr-1 font-bold text-marino/50">$</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        value={valor ? formatMiles(valor) : ''}
+        placeholder="0"
+        onChange={(e) => {
+          const d = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+          onChange(d ? Math.min(Number(d.slice(0, 9)), 50_000_000) : null);
+        }}
+        className="tabular w-full min-w-0 bg-transparent text-lg font-extrabold text-marino outline-none placeholder:text-marino/25"
+      />
+    </div>
+  );
+}
+
 export default function Registrar() {
   const toast = useToast();
   const loc = useLocation();
   const navigate = useNavigate();
   const precarga = (loc.state as { precarga?: Precarga } | null)?.precarga;
   const { data: bancos } = useBancos();
+  const { data: todosProductos } = useProductosAdmin();
   const { pendientes, sincronizar } = usePendientes();
 
-  // El client_id se genera al ABRIR el formulario; un reintento usa el mismo (no duplica).
-  const [clientId, setClientId] = useState(() => crypto.randomUUID());
   const [tipo, setTipo] = useState<TipoIngreso>(precarga?.tipo ?? 'recaudo_banco');
   const [bancoId, setBancoId] = useState<number | null>(precarga?.banco_id ?? leerBanco());
-  const [monto, setMonto] = useState<number | null>(precarga?.monto ?? null);
   const [medio, setMedio] = useState<MedioPago | null>(precarga?.medio_pago ?? 'efectivo');
   const [nota, setNota] = useState(precarga?.nota ?? '');
   const [corrige, setCorrige] = useState(precarga?.corrige);
+
+  // Recaudo de banco: desglose por líneas. Donación / remate: un solo monto.
+  const [lineas, setLineas] = useState<Linea[]>(() =>
+    precarga?.tipo === 'recaudo_banco'
+      ? [nuevaLinea({ concepto: precarga.concepto ?? 'general', producto_id: precarga.producto_id ?? null }, precarga.monto)]
+      : [nuevaLinea()],
+  );
+  const [clientIdSimple, setClientIdSimple] = useState(() => crypto.randomUUID());
+  const [montoSimple, setMontoSimple] = useState<number | null>(precarga && precarga.tipo !== 'recaudo_banco' ? precarga.monto : null);
 
   const [paso, setPaso] = useState<0 | 1 | 2>(0); // 0 = editando, 1 = confirmar, 2 = segunda confirmación
   const [guardando, setGuardando] = useState(false);
@@ -105,18 +186,28 @@ export default function Registrar() {
     if (precarga) navigate(loc.pathname, { replace: true, state: null });
   }, []);
 
+  const productos = (todosProductos ?? []).filter((p) => p.activo);
   const bancosActivos = (bancos ?? []).filter((b) => b.activo);
   const banco = bancosActivos.find((b) => b.id === bancoId);
-  const lugar = tipo === 'recaudo_banco' ? banco?.nombre ?? '' : TIPOS[tipo];
+  const esBanco = tipo === 'recaudo_banco';
+  const lugar = esBanco ? banco?.nombre ?? '' : TIPOS[tipo];
+
+  const total = esBanco ? lineas.reduce((s, l) => s + (l.monto ?? 0), 0) : montoSimple ?? 0;
+  const lineasIncompletas = esBanco ? lineas.filter((l) => !l.item || !l.monto).length : 0;
 
   const faltantes: string[] = [];
-  if (tipo === 'recaudo_banco' && !banco) faltantes.push('el punto');
-  if (!monto) faltantes.push('el monto');
+  if (esBanco && !banco) faltantes.push('el punto');
+  if (esBanco && lineasIncompletas) faltantes.push(lineas.length > 1 ? 'completar el desglose' : 'qué vendió y cuánto');
+  if (!esBanco && !montoSimple) faltantes.push('el monto');
   if (!medio) faltantes.push('el medio de pago');
 
+  const cambiarLinea = (i: number, cambios: Partial<Linea>) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...cambios } : l)));
+  const quitarLinea = (i: number) => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [nuevaLinea()]));
+
   const limpiar = () => {
-    setClientId(crypto.randomUUID());
-    setMonto(null);
+    setLineas([nuevaLinea()]);
+    setClientIdSimple(crypto.randomUUID());
+    setMontoSimple(null);
     setNota('');
     setMedio('efectivo');
     setError(null);
@@ -124,54 +215,68 @@ export default function Registrar() {
   };
 
   const guardar = async () => {
-    if (!monto || !medio || guardando) return;
+    if (!medio || guardando || total <= 0) return;
     setGuardando(true);
     setError(null);
-    const datos = {
-      client_id: clientId,
-      tipo,
-      banco_id: tipo === 'recaudo_banco' ? bancoId : null,
-      medio_pago: medio,
-      monto,
-      nota: nota.trim() || null,
-    };
-    if (tipo === 'recaudo_banco' && bancoId) {
+    if (esBanco && bancoId) {
       try {
         localStorage.setItem(CLAVE_BANCO, String(bancoId));
       } catch {
         /* sin almacenamiento */
       }
     }
-    try {
-      const id = await enviarIngreso(datos);
-      navigator.vibrate?.(120);
-      setExito({ tipo: 'ok', titulo: `Registro #${id}`, detalle: `${formatCOP(monto)} · ${lugar}` });
-      setPaso(0);
-      limpiar();
-    } catch (e) {
-      setPaso(0);
-      if (esErrorDeRed(e)) {
-        // Sin señal: queda guardado en el celular y se envía solo al volver la red
-        agregarPendiente({ ...datos, lugar, creado: new Date().toISOString() });
-        navigator.vibrate?.([80, 60, 80]);
-        setExito({
-          tipo: 'pendiente',
-          titulo: 'Guardado sin señal',
-          detalle: `${formatCOP(monto)} · ${lugar}. Se enviará solo cuando vuelva la conexión.`,
-        });
-        limpiar();
-      } else {
-        // Error del servidor: NO se limpia; se conserva el client_id para reintentar sin duplicar
-        setError(mensajeError(e));
-        navigator.vibrate?.([80, 60, 80]);
+
+    const base = { tipo, banco_id: esBanco ? bancoId : null, medio_pago: medio, nota: nota.trim() || null };
+    const porEnviar = esBanco
+      ? lineas.map((l) => ({ ...base, client_id: l.clientId, monto: l.monto!, concepto: l.item!.concepto, producto_id: l.item!.producto_id }))
+      : [{ ...base, client_id: clientIdSimple, monto: montoSimple!, concepto: 'general' as Concepto, producto_id: null }];
+
+    const ids: number[] = [];
+    for (let k = 0; k < porEnviar.length; k++) {
+      const d = porEnviar[k];
+      try {
+        ids.push(await enviarIngreso(d));
+        // Línea guardada: se quita del formulario para que un reintento no la repita
+        if (esBanco) setLineas((ls) => ls.filter((l) => l.clientId !== d.client_id));
+      } catch (e) {
+        setPaso(0);
+        setGuardando(false);
+        if (esErrorDeRed(e)) {
+          // Sin señal: lo que falta queda guardado en el celular y se envía solo al volver la red
+          const resto = porEnviar.slice(k);
+          for (const r of resto) {
+            const detalle = esBanco ? ` · ${nombreItem(r, todosProductos, false)}` : '';
+            agregarPendiente({ ...r, lugar: `${lugar}${detalle}`, creado: new Date().toISOString() });
+          }
+          navigator.vibrate?.([80, 60, 80]);
+          setExito({
+            tipo: 'pendiente',
+            titulo: 'Guardado sin señal',
+            detalle: `${formatCOP(resto.reduce((s, r) => s + r.monto, 0))} · ${lugar}. Se enviará solo cuando vuelva la conexión.`,
+          });
+          limpiar();
+        } else {
+          // Error del servidor: se conservan las líneas sin guardar (mismo client_id → reintentar no duplica)
+          setError(mensajeError(e));
+          navigator.vibrate?.([80, 60, 80]);
+        }
+        return;
       }
-    } finally {
-      setGuardando(false);
     }
+
+    navigator.vibrate?.(120);
+    setExito({
+      tipo: 'ok',
+      titulo: ids.length > 1 ? `${ids.length} registros guardados` : `Registro #${ids[0]}`,
+      detalle: `${formatCOP(total)} · ${lugar}`,
+    });
+    setPaso(0);
+    setGuardando(false);
+    limpiar();
   };
 
   const alConfirmar = () => {
-    if (paso === 1 && monto && monto > LIMITE_DOBLE) setPaso(2);
+    if (paso === 1 && total > LIMITE_DOBLE) setPaso(2);
     else guardar();
   };
 
@@ -231,11 +336,16 @@ export default function Registrar() {
             Use esta pantalla cada vez que <b>recoja dinero</b> de un banco o del Almacén, o reciba una <b>donación</b> o un{' '}
             <b>remate</b>.
           </li>
-          <li>Elija qué es, de qué punto viene (si es de un banco), cuánto es y cómo se pagó.</li>
           <li>
-            Toque <b>Registrar</b>. Le mostramos el monto en grande y en letras para que revise los ceros antes de confirmar.
+            Si es de un banco, haga el <b>desglose</b>: una línea por producto con lo que el banco le dijo (ej.: Tamales $600.000,
+            Lechona $250.000). Use <b>+ Agregar otro producto</b> para más líneas. El total se suma solo.
           </li>
-          <li>Al guardar, el termómetro de la pantalla sube solo y el formulario queda limpio para el siguiente.</li>
+          <li>
+            Si el banco no sabe de qué fue la plata, o es del Almacén, use <b>📦 General (sin detalle)</b>.
+          </li>
+          <li>
+            Toque <b>Registrar</b>. Le mostramos el total en grande y en letras para que revise los ceros antes de confirmar.
+          </li>
         </ol>
         <p className="mt-2 text-xs text-marino/60">
           Si no hay señal, el registro queda guardado en el celular y se envía solo cuando vuelva la conexión.
@@ -250,12 +360,9 @@ export default function Registrar() {
             </Opcion>
           ))}
         </div>
-        <p className="mt-2 text-xs text-marino/60">
-          Las tablas de bingo se pagan en los bancos, así que ya van incluidas en el recaudo del banco: no las registre aparte.
-        </p>
       </Tarjeta>
 
-      {tipo === 'recaudo_banco' && (
+      {esBanco && (
         <Tarjeta titulo="2. ¿De qué punto lo recogió?">
           <div className="grid grid-cols-2 gap-2">
             {bancosActivos.map((b) => (
@@ -268,16 +375,54 @@ export default function Registrar() {
         </Tarjeta>
       )}
 
-      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 3 : 2}. ¿Cuánto dinero es?`}>
-        <MontoInput valor={monto} onChange={setMonto} />
-        {monto ? (
-          <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(monto)}</p>
-        ) : (
-          <p className="mt-2 text-xs text-marino/60">Escriba el total que contó. Los botones de abajo suman al valor que ya tiene.</p>
-        )}
-      </Tarjeta>
+      {esBanco ? (
+        <Tarjeta titulo="3. ¿De qué fue? (desglose por producto)">
+          <ul className="space-y-3">
+            {lineas.map((l, i) => (
+              <li key={l.clientId} className="rounded-xl border border-dorado/30 bg-crema/60 p-2">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-bold text-marino/55">Producto {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => quitarLinea(i)}
+                    className="h-7 px-2 text-xs font-bold text-rojo"
+                    aria-label={`Quitar producto ${i + 1}`}
+                  >
+                    ✕ Quitar
+                  </button>
+                </div>
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-2">
+                  <SelectorItem valor={l.item} onChange={(item) => cambiarLinea(i, { item })} productos={productos} />
+                  <MontoLinea valor={l.monto} onChange={(monto) => cambiarLinea(i, { monto })} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => setLineas((ls) => [...ls, nuevaLinea()])}
+            className="mt-3 h-12 w-full rounded-xl border-2 border-dashed border-real/40 text-base font-bold text-real active:bg-real/5"
+          >
+            + Agregar otro producto
+          </button>
+          <div className="mt-3 flex items-baseline justify-between rounded-xl bg-marino px-4 py-3 text-crema">
+            <span className="text-sm font-bold uppercase tracking-wider text-dorado-claro">Total</span>
+            <span className="tabular text-2xl font-black">{formatCOP(total)}</span>
+          </div>
+          {total > 0 && <p className="mt-1 text-right text-sm font-semibold capitalize text-real">{pesosEnLetras(total)}</p>}
+        </Tarjeta>
+      ) : (
+        <Tarjeta titulo="2. ¿Cuánto dinero es?">
+          <MontoInput valor={montoSimple} onChange={setMontoSimple} />
+          {montoSimple ? (
+            <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(montoSimple)}</p>
+          ) : (
+            <p className="mt-2 text-xs text-marino/60">Escriba el total. Los botones de abajo suman al valor que ya tiene.</p>
+          )}
+        </Tarjeta>
+      )}
 
-      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 4 : 3}. ¿Cómo se pagó?`}>
+      <Tarjeta titulo={`${esBanco ? 4 : 3}. ¿Cómo se pagó?`}>
         <div className="grid grid-cols-2 gap-2">
           {(Object.keys(MEDIOS) as MedioPago[]).map((m) => (
             <Opcion key={m} activo={medio === m} onClick={() => setMedio(m)} sub={SUB_MEDIO[m]}>
@@ -298,7 +443,7 @@ export default function Registrar() {
               ? 'Opcional. Ej.: remate de la torta'
               : tipo === 'donacion'
                 ? 'Opcional. Ej.: donación de la familia Pérez'
-                : 'Opcional. Ej.: incluye 10 tablas de bingo'
+                : 'Opcional. Ej.: entregó doña Marta'
           }
           className="w-full rounded-xl border-2 border-marino/15 bg-white p-3 text-base outline-none focus:border-dorado"
         />
@@ -307,6 +452,7 @@ export default function Registrar() {
       {error && (
         <div className="rounded-2xl border-2 border-rojo bg-rojo/10 p-4">
           <p className="font-bold text-rojo">No se guardó: {error}</p>
+          {esBanco && <p className="mt-1 text-sm text-marino/70">Las líneas que sí se guardaron ya se quitaron del formulario.</p>}
           <button
             type="button"
             onClick={guardar}
@@ -322,9 +468,9 @@ export default function Registrar() {
         type="button"
         disabled={faltantes.length > 0 || guardando}
         onClick={() => setPaso(1)}
-        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] h-16 w-full md:bottom-3 rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-lg disabled:bg-marino/15 disabled:text-marino/50"
+        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] h-16 w-full rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-lg disabled:bg-marino/15 disabled:text-marino/50 md:bottom-3"
       >
-        {faltantes.length ? `Falta ${faltantes.join(', ')}` : `Registrar ${formatCOP(monto)}`}
+        {faltantes.length ? `Falta ${faltantes.join(', ')}` : `Registrar ${formatCOP(total)}`}
       </button>
 
       <ConfirmModal
@@ -337,15 +483,25 @@ export default function Registrar() {
         onCancelar={() => setPaso(0)}
       >
         <div className="text-center">
-          <div className="tabular text-5xl font-black leading-tight text-marino">{formatCOP(monto)}</div>
-          <div className="mt-1 text-lg font-bold capitalize text-real">{pesosEnLetras(monto)}</div>
+          <div className="tabular text-5xl font-black leading-tight text-marino">{formatCOP(total)}</div>
+          <div className="mt-1 text-lg font-bold capitalize text-real">{pesosEnLetras(total)}</div>
           <div className="mt-3 text-lg font-semibold">
             {lugar} · {medio ? MEDIOS[medio] : ''}
           </div>
-          {nota.trim() && <div className="mt-1 text-sm text-marino/70">“{nota.trim()}”</div>}
+          {esBanco && (
+            <ul className="mx-auto mt-3 max-w-xs space-y-1 rounded-xl bg-white p-3 text-left text-sm">
+              {lineas.map((l) => (
+                <li key={l.clientId} className="flex justify-between gap-2">
+                  <span className="truncate">{l.item ? nombreItem(l.item, todosProductos) : ''}</span>
+                  <b className="tabular shrink-0">{formatCOP(l.monto)}</b>
+                </li>
+              ))}
+            </ul>
+          )}
+          {nota.trim() && <div className="mt-2 text-sm text-marino/70">“{nota.trim()}”</div>}
           {paso === 2 && (
             <p className="mt-4 rounded-xl bg-rojo/10 p-3 font-bold text-rojo">
-              Verifique los ceros: son {pesosEnLetras(monto)}. ¿Está seguro?
+              Verifique los ceros: son {pesosEnLetras(total)}. ¿Está seguro?
             </p>
           )}
         </div>
