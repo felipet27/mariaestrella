@@ -4,7 +4,8 @@ import { supabase } from './supabase';
 import type { Perfil } from './tipos';
 
 /** Supabase Auth exige correo: se usa uno interno ficticio que el usuario nunca ve. */
-export const toEmail = (usuario: string) => `${usuario.trim().toLowerCase()}@sanisidro.com`;
+// Acepta "felipe" o "felipe@sanisidro.com" (por si alguien escribe el correo completo).
+export const toEmail = (usuario: string) => `${usuario.trim().toLowerCase().split('@')[0]}@sanisidro.com`;
 
 interface AuthCtx {
   cargando: boolean;
