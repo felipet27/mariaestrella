@@ -21,7 +21,7 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
 2. **SQL Editor** → pegar todo [supabase/schema.sql](supabase/schema.sql) → **Run**.
 3. **Authentication → Sign In / Providers → Email**: desactivar *Allow new users to sign up*.
 4. **Authentication → Users → Add user → Create new user** (×4), con **Auto Confirm User**:
-   `angela@sanisidro.test`, `johana@sanisidro.test`, `felipe@sanisidro.test`, `invitado@sanisidro.test`.
+   `angela@sanisidro.com`, `johana@sanisidro.com`, `felipe@sanisidro.com`, `invitado@sanisidro.com`.
    Las contraseñas se escriben **solo ahí**.
 5. **SQL Editor** → correr [supabase/perfiles.sql](supabase/perfiles.sql). Debe listar 4 perfiles.
 6. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
