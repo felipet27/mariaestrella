@@ -199,16 +199,31 @@ export default function Inicio() {
       )}
 
       <Tarjeta titulo="Por punto de recaudo">
-        <ul className="divide-y divide-marino/10">
+        <ul className="flex flex-col divide-y divide-marino/10">
           {data.bancos.map((bn) => {
             const ref = bn.ultima_recogida ? new Date(bn.ultima_recogida).getTime() : EVENTO_INICIO.getTime();
             // Banco general (dinero de antes del evento) no es un punto físico: no lleva alerta de recogida
             const esGeneral = bn.nombre.trim().toLowerCase() === 'banco general';
             const alerta = !esGeneral && ahora - ref > UNA_HORA && ahora > EVENTO_INICIO.getTime();
             return (
-              <li key={bn.banco_id} className={`py-2 ${alerta ? '-mx-2 rounded-xl bg-rojo/10 px-2' : ''}`}>
+              <li
+                key={bn.banco_id}
+                // Banco general va al final de la lista, después de donaciones y remates
+                style={{ order: esGeneral ? 2 : 0 }}
+                className={`py-2 ${alerta ? '-mx-2 rounded-xl bg-rojo/10 px-2' : ''} ${
+                  esGeneral ? '-mx-2 mt-2 rounded-xl border-2 border-dashed border-real/25 bg-real/[0.04] px-2' : ''
+                }`}
+              >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-bold">{bn.nombre}</span>
+                  <span className="font-bold">
+                    {esGeneral && <span aria-hidden="true">🏦 </span>}
+                    {bn.nombre}
+                    {esGeneral && (
+                      <span className="ml-1.5 inline-block whitespace-nowrap rounded-full bg-real/10 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-real">
+                        Antes del evento
+                      </span>
+                    )}
+                  </span>
                   <span className="tabular shrink-0 text-base font-black sm:text-lg">{formatCOP(bn.total)}</span>
                 </div>
                 <div className="flex flex-wrap justify-between gap-x-3 text-xs text-marino/70">
@@ -229,7 +244,7 @@ export default function Inicio() {
             );
           })}
           {(['donacion', 'remate'] as const).map((t) => (
-            <li key={t} className="py-2">
+            <li key={t} className="py-2" style={{ order: 1 }}>
               <div className="flex items-baseline justify-between">
                 <span className="font-bold">{t === 'donacion' ? 'Donaciones' : 'Remates'}</span>
                 <span className="tabular shrink-0 text-base font-black sm:text-lg">{formatCOP(sumaTipo(t))}</span>

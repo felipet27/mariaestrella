@@ -334,6 +334,8 @@ export default function Registrar() {
   const productos = (todosProductos ?? []).filter((p) => p.activo);
   const bancosActivos = (bancos ?? []).filter((b) => b.activo);
   const banco = bancosActivos.find((b) => b.id === bancoId);
+  const bancoGeneral = bancosActivos.find((b) => b.nombre.trim().toLowerCase() === 'banco general');
+  const puntosEvento = bancosActivos.filter((b) => b.id !== bancoGeneral?.id);
   const esBanco = tipo === 'recaudo_banco';
   const lugar = esBanco ? banco?.nombre ?? '' : TIPOS[tipo];
 
@@ -562,14 +564,52 @@ export default function Registrar() {
       {esBanco && (
         <Tarjeta titulo="2. ¿De qué punto lo recogió?" className={`scroll-mt-24 ${intentado && !banco ? 'ring-2 ring-rojo/60' : ''}`} id="sec-punto">
           {intentado && !banco && <p className="-mt-1 mb-2 text-sm font-bold text-rojo">👆 Elija el banco o punto de donde recogió el dinero</p>}
+          {/* Puntos físicos del evento en cuadrícula; si quedan impares, el último ocupa todo el ancho */}
           <div className="grid grid-cols-2 gap-2">
-            {bancosActivos.map((b) => (
-              <Opcion key={b.id} activo={bancoId === b.id} onClick={() => setBancoId(b.id)} className="text-lg">
+            {puntosEvento.map((b, i) => (
+              <Opcion
+                key={b.id}
+                activo={bancoId === b.id}
+                onClick={() => setBancoId(b.id)}
+                className={`text-lg ${puntosEvento.length % 2 === 1 && i === puntosEvento.length - 1 ? 'col-span-2' : ''}`}
+              >
                 {b.nombre}
               </Opcion>
             ))}
           </div>
-          {banco?.nombre.trim().toLowerCase() === 'banco general' ? (
+
+          {/* Banco general aparte: es para lo recibido ANTES del evento */}
+          {bancoGeneral && (
+            <>
+              <div className="my-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-marino/45">
+                <span className="h-px flex-1 bg-marino/10" />
+                Antes del evento
+                <span className="h-px flex-1 bg-marino/10" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setBancoId(bancoGeneral.id)}
+                aria-pressed={bancoId === bancoGeneral.id}
+                className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 px-4 py-2 text-left transition-colors ${
+                  bancoId === bancoGeneral.id
+                    ? 'border-real bg-real text-crema shadow'
+                    : 'border-dashed border-real/40 bg-real/[0.04] text-marino active:bg-real/10'
+                }`}
+              >
+                <span className="text-2xl" aria-hidden="true">
+                  🏦
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold">{bancoGeneral.nombre}</span>
+                  <span className={`block text-xs ${bancoId === bancoGeneral.id ? 'text-crema/80' : 'text-marino/60'}`}>
+                    Donaciones, pagos u otros recibidos antes del evento
+                  </span>
+                </span>
+              </button>
+            </>
+          )}
+
+          {banco && banco.id === bancoGeneral?.id ? (
             <p className="mt-2 rounded-lg bg-real/10 p-2 text-sm text-marino/85">
               🏦 <b>Banco general</b> es para el dinero recibido <b>antes del evento</b> (donaciones, pagos u otros). Use{' '}
               <b>📦 General</b> o el producto que corresponda, y escriba en la <b>nota</b> de qué fue (ej.: “donación de la familia
