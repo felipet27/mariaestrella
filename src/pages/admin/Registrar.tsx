@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -115,7 +115,17 @@ interface OpcionItem {
  * Buscador de producto: se escribe parte del nombre ("tam", "chicharron") y se toca
  * el resultado. Enter elige el primero. Funciona sin tildes.
  */
-function SelectorItem({ valor, onChange, productos }: { valor: Item | null; onChange: (i: Item | null) => void; productos: Producto[] }) {
+function SelectorItem({
+  valor,
+  onChange,
+  productos,
+  falta,
+}: {
+  valor: Item | null;
+  onChange: (i: Item | null) => void;
+  productos: Producto[];
+  falta?: boolean;
+}) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState('');
   const [marcado, setMarcado] = useState(0);
@@ -153,7 +163,7 @@ function SelectorItem({ valor, onChange, productos }: { valor: Item | null; onCh
     <div className="relative">
       <div
         className={`flex h-12 items-center rounded-xl border-2 bg-white px-3 focus-within:border-dorado ${
-          valor || abierto ? 'border-dorado/50' : 'border-rojo/40'
+          falta && !abierto ? 'border-rojo/60 bg-rojo/5' : 'border-dorado/50'
         }`}
       >
         <span className="mr-2 text-marino/40" aria-hidden="true">
@@ -240,22 +250,41 @@ function SelectorItem({ valor, onChange, productos }: { valor: Item | null; onCh
 }
 
 /** Campo de monto compacto para las líneas del desglose. */
-function MontoLinea({ valor, onChange }: { valor: number | null; onChange: (v: number | null) => void }) {
+function MontoLinea({
+  valor,
+  onChange,
+  inputRef,
+  falta,
+}: {
+  valor: number | null;
+  onChange: (v: number | null) => void;
+  inputRef?: (el: HTMLInputElement | null) => void;
+  falta?: boolean;
+}) {
   return (
-    <div className="flex h-12 items-center rounded-xl border-2 border-dorado/50 bg-white px-2 focus-within:border-dorado">
+    <div
+      className={`flex h-12 items-center rounded-xl border-2 bg-white px-3 focus-within:border-dorado ${
+        falta ? 'border-rojo/60 bg-rojo/5' : 'border-dorado/50'
+      }`}
+    >
       <span className="mr-1 font-bold text-marino/50">$</span>
       <input
+        ref={inputRef}
         type="text"
         inputMode="numeric"
         autoComplete="off"
+        enterKeyHint="done"
+        aria-label="Monto"
         value={valor ? formatMiles(valor) : ''}
-        placeholder="0"
+        placeholder="¿Cuánto?"
         onChange={(e) => {
           const d = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
           onChange(d ? Math.min(Number(d.slice(0, 9)), 50_000_000) : null);
         }}
-        className="tabular w-full min-w-0 bg-transparent text-lg font-extrabold text-marino outline-none placeholder:text-marino/25"
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        className="tabular w-full min-w-0 bg-transparent text-lg font-extrabold text-marino outline-none placeholder:text-base placeholder:font-medium placeholder:text-marino/35"
       />
+      {valor ? <span className="ml-2 shrink-0 truncate text-[11px] font-semibold first-letter:uppercase text-real/80">{pesosEnLetras(valor).replace(/ pesos$/, '')}</span> : null}
     </div>
   );
 }
@@ -290,6 +319,11 @@ export default function Registrar() {
   const [exito, setExito] = useState<Exito | null>(null);
   const [descartar, setDescartar] = useState<string | null>(null);
   const [reintentando, setReintentando] = useState(false);
+  // Se activa al tocar Registrar con algo pendiente: marca en rojo lo que falta
+  const [intentado, setIntentado] = useState(false);
+  // Última línea quitada, para poder deshacer
+  const [quitada, setQuitada] = useState<{ linea: Linea; pos: number } | null>(null);
+  const montoRefs = useRef(new Map<string, HTMLInputElement>());
   const cerrarExito = useCallback(() => setExito(null), []);
 
   // Limpia el state de navegación para que recargar no vuelva a precargar
@@ -313,7 +347,57 @@ export default function Registrar() {
   if (!medio) faltantes.push('el medio de pago');
 
   const cambiarLinea = (i: number, cambios: Partial<Linea>) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...cambios } : l)));
-  const quitarLinea = (i: number) => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [nuevaLinea()]));
+  const quitarLinea = (i: number) => {
+    const l = lineas[i];
+    if (l.item || l.monto) setQuitada({ linea: l, pos: i });
+    setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [nuevaLinea()]));
+  };
+  const deshacerQuitar = () => {
+    if (!quitada) return;
+    setLineas((ls) => {
+      const base = ls.length === 1 && !ls[0].item && !ls[0].monto ? [] : ls;
+      const n = [...base];
+      n.splice(Math.min(quitada.pos, n.length), 0, quitada.linea);
+      return n;
+    });
+    setQuitada(null);
+  };
+  // El aviso de deshacer desaparece solo
+  useEffect(() => {
+    if (!quitada) return;
+    const t = window.setTimeout(() => setQuitada(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [quitada]);
+
+  /** Al elegir el producto, el cursor salta al monto de esa línea. */
+  const elegirItem = (i: number, item: Item | null) => {
+    cambiarLinea(i, { item });
+    const id = lineas[i]?.clientId;
+    if (item && id && !lineas[i].monto) setTimeout(() => montoRefs.current.get(id)?.focus(), 80);
+  };
+
+  const agregarLinea = () => {
+    setLineas((ls) => [...ls, nuevaLinea()]);
+  };
+
+  // Productos repetidos en el desglose (probable error)
+  const repetidos = new Set(
+    lineas
+      .map((l) => (l.item ? valorItem(l.item) : ''))
+      .filter((v, i, arr) => v && v !== 'general' && arr.indexOf(v) !== i),
+  );
+
+  /** Si falta algo, lleva a la primera sección incompleta en vez de solo deshabilitar el botón. */
+  const alTocarRegistrar = () => {
+    if (!faltantes.length) {
+      setPaso(1);
+      return;
+    }
+    setIntentado(true);
+    const destino = esBanco && !banco ? 'sec-punto' : esBanco && lineasIncompletas ? 'sec-desglose' : !esBanco && !montoSimple ? 'sec-monto' : 'sec-medio';
+    document.getElementById(destino)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    navigator.vibrate?.(40);
+  };
 
   const limpiar = () => {
     setLineas([nuevaLinea()]);
@@ -323,6 +407,8 @@ export default function Registrar() {
     setMedio('efectivo');
     setError(null);
     setCorrige(undefined);
+    setIntentado(false);
+    setQuitada(null);
   };
 
   const guardar = async () => {
@@ -474,7 +560,8 @@ export default function Registrar() {
       </Tarjeta>
 
       {esBanco && (
-        <Tarjeta titulo="2. ¿De qué punto lo recogió?">
+        <Tarjeta titulo="2. ¿De qué punto lo recogió?" className={`scroll-mt-24 ${intentado && !banco ? 'ring-2 ring-rojo/60' : ''}`} id="sec-punto">
+          {intentado && !banco && <p className="-mt-1 mb-2 text-sm font-bold text-rojo">👆 Elija el banco o punto de donde recogió el dinero</p>}
           <div className="grid grid-cols-2 gap-2">
             {bancosActivos.map((b) => (
               <Opcion key={b.id} activo={bancoId === b.id} onClick={() => setBancoId(b.id)} className="text-lg">
@@ -487,32 +574,68 @@ export default function Registrar() {
       )}
 
       {esBanco ? (
-        <Tarjeta titulo="3. ¿De qué fue? (desglose por producto)">
+        <Tarjeta
+          titulo="3. ¿De qué fue? (desglose por producto)"
+          className={`scroll-mt-24 ${intentado && lineasIncompletas ? 'ring-2 ring-rojo/60' : ''}`}
+          id="sec-desglose"
+        >
+          {intentado && lineasIncompletas > 0 && (
+            <p className="-mt-1 mb-2 text-sm font-bold text-rojo">👇 Complete lo marcado en rojo: qué vendió y cuánto</p>
+          )}
           <ul className="space-y-3">
-            {lineas.map((l, i) => (
-              <li key={l.clientId} className="rounded-xl border border-dorado/30 bg-crema/60 p-2">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-xs font-bold text-marino/55">Producto {i + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => quitarLinea(i)}
-                    className="h-7 px-2 text-xs font-bold text-rojo"
-                    aria-label={`Quitar producto ${i + 1}`}
-                  >
-                    ✕ Quitar
-                  </button>
-                </div>
-                {/* Producto en su propia fila (espacio para escribir) y el monto debajo */}
-                <div className="space-y-2">
-                  <SelectorItem valor={l.item} onChange={(item) => cambiarLinea(i, { item })} productos={productos} />
-                  <MontoLinea valor={l.monto} onChange={(monto) => cambiarLinea(i, { monto })} />
-                </div>
-              </li>
-            ))}
+            {lineas.map((l, i) => {
+              const repetido = l.item && repetidos.has(valorItem(l.item));
+              return (
+                <li key={l.clientId} className="rounded-xl border border-dorado/30 bg-crema/60 p-2">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-bold text-marino/55">
+                      Producto {i + 1}
+                      {l.item && l.monto ? <span className="ml-1 text-verde">✓</span> : null}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => quitarLinea(i)}
+                      className="h-8 px-2 text-xs font-bold text-rojo"
+                      aria-label={`Quitar producto ${i + 1}`}
+                    >
+                      ✕ Quitar
+                    </button>
+                  </div>
+                  {/* Producto en su propia fila (espacio para escribir) y el monto debajo */}
+                  <div className="space-y-2">
+                    <SelectorItem valor={l.item} onChange={(item) => elegirItem(i, item)} productos={productos} falta={intentado && !l.item} />
+                    <MontoLinea
+                      valor={l.monto}
+                      onChange={(monto) => cambiarLinea(i, { monto })}
+                      falta={intentado && !l.monto}
+                      inputRef={(el) => {
+                        if (el) montoRefs.current.set(l.clientId, el);
+                        else montoRefs.current.delete(l.clientId);
+                      }}
+                    />
+                  </div>
+                  {repetido && (
+                    <p className="mt-1.5 text-xs font-semibold text-dorado">
+                      ⚠️ Este producto ya está en otra línea. Si es lo mismo, sume los montos en una sola.
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
+
+          {quitada && (
+            <div className="animar-entrar mt-3 flex items-center justify-between rounded-xl bg-marino px-3 py-2 text-sm text-crema">
+              <span>Línea quitada</span>
+              <button type="button" onClick={deshacerQuitar} className="h-9 rounded-lg px-3 font-extrabold text-dorado-claro">
+                ↩ Deshacer
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={() => setLineas((ls) => [...ls, nuevaLinea()])}
+            onClick={agregarLinea}
             className="mt-3 h-12 w-full rounded-xl border-2 border-dashed border-real/40 text-base font-bold text-real active:bg-real/5"
           >
             + Agregar otro producto
@@ -521,20 +644,25 @@ export default function Registrar() {
             <span className="text-sm font-bold uppercase tracking-wider text-dorado-claro">Total</span>
             <span className="tabular text-2xl font-black">{formatCOP(total)}</span>
           </div>
-          {total > 0 && <p className="mt-1 text-right text-sm font-semibold capitalize text-real">{pesosEnLetras(total)}</p>}
+          {total > 0 && <p className="mt-1 text-right text-sm font-semibold first-letter:uppercase text-real">{pesosEnLetras(total)}</p>}
         </Tarjeta>
       ) : (
-        <Tarjeta titulo="2. ¿Cuánto dinero es?">
+        <Tarjeta
+          titulo="2. ¿Cuánto dinero es?"
+          className={`scroll-mt-24 ${intentado && !montoSimple ? 'ring-2 ring-rojo/60' : ''}`}
+          id="sec-monto"
+        >
+          {intentado && !montoSimple && <p className="-mt-1 mb-2 text-sm font-bold text-rojo">👇 Escriba el monto</p>}
           <MontoInput valor={montoSimple} onChange={setMontoSimple} />
           {montoSimple ? (
-            <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(montoSimple)}</p>
+            <p className="mt-1 text-sm font-semibold first-letter:uppercase text-real">{pesosEnLetras(montoSimple)}</p>
           ) : (
             <p className="mt-2 text-xs text-marino/60">Escriba el total. Los botones de abajo suman al valor que ya tiene.</p>
           )}
         </Tarjeta>
       )}
 
-      <Tarjeta titulo={`${esBanco ? 4 : 3}. ¿Cómo se pagó?`}>
+      <Tarjeta titulo={`${esBanco ? 4 : 3}. ¿Cómo se pagó?`} className="scroll-mt-24" id="sec-medio">
         <div className="grid grid-cols-2 gap-2">
           {(Object.keys(MEDIOS) as MedioPago[]).map((m) => (
             <Opcion key={m} activo={medio === m} onClick={() => setMedio(m)} sub={SUB_MEDIO[m]}>
@@ -576,14 +704,29 @@ export default function Registrar() {
         </div>
       )}
 
-      <button
-        type="button"
-        disabled={faltantes.length > 0 || guardando}
-        onClick={() => setPaso(1)}
-        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] h-16 w-full rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-lg disabled:bg-marino/15 disabled:text-marino/50 md:bottom-3"
-      >
-        {faltantes.length ? `Falta ${faltantes.join(', ')}` : `Registrar ${formatCOP(total)}`}
-      </button>
+      {/* Barra fija con fondo propio: no se mezcla con el contenido de abajo */}
+      <div className="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] z-20 -mx-4 bg-gradient-to-t from-crema via-crema/95 to-crema/0 px-4 pb-2 pt-4 md:bottom-0">
+        <button
+          type="button"
+          disabled={guardando}
+          onClick={alTocarRegistrar}
+          className={`flex h-16 w-full flex-col items-center justify-center rounded-2xl shadow-lg disabled:opacity-60 ${
+            faltantes.length ? 'bg-marino text-crema' : 'bg-dorado text-marino'
+          }`}
+        >
+          {faltantes.length ? (
+            <>
+              <span className="text-lg font-extrabold">Registrar</span>
+              <span className="text-xs font-semibold text-crema/75">Falta {faltantes.join(', ')} · toque para ir</span>
+            </>
+          ) : (
+            <>
+              <span className="tabular text-xl font-extrabold">Registrar {formatCOP(total)}</span>
+              {esBanco && lineas.length > 1 && <span className="text-xs font-semibold text-marino/70">{lineas.length} productos · {lugar}</span>}
+            </>
+          )}
+        </button>
+      </div>
 
       <ConfirmModal
         abierto={paso > 0}
@@ -596,7 +739,7 @@ export default function Registrar() {
       >
         <div className="text-center">
           <div className="tabular text-5xl font-black leading-tight text-marino">{formatCOP(total)}</div>
-          <div className="mt-1 text-lg font-bold capitalize text-real">{pesosEnLetras(total)}</div>
+          <div className="mt-1 text-lg font-bold first-letter:uppercase text-real">{pesosEnLetras(total)}</div>
           <div className="mt-3 text-lg font-semibold">
             {lugar} · {medio ? MEDIOS[medio] : ''}
           </div>

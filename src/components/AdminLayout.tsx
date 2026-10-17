@@ -113,9 +113,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 }
 
 /** Tarjeta blanca estándar del panel. */
-export function Tarjeta({ titulo, children, className = '' }: { titulo?: ReactNode; children: ReactNode; className?: string }) {
+export function Tarjeta({
+  titulo,
+  children,
+  className = '',
+  id,
+}: {
+  titulo?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
-    <section className={`rounded-2xl border border-dorado/30 bg-white p-4 shadow-sm ${className}`}>
+    <section id={id} className={`rounded-2xl border border-dorado/30 bg-white p-4 shadow-sm transition-shadow ${className}`}>
       {titulo && <h2 className="mb-3 text-lg font-bold text-marino">{titulo}</h2>}
       {children}
     </section>

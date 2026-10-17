@@ -268,7 +268,7 @@ function Meta() {
         Meta actual: <b className="tabular text-lg">{metaActual ? formatCOP(metaActual) : '…'}</b>
       </p>
       <MontoInput valor={meta} onChange={setMeta} atajos={[100_000, 1_000_000, 5_000_000, 10_000_000]} max={1_000_000_000} />
-      {meta ? <p className="text-sm font-semibold capitalize text-real">{pesosEnLetras(meta)}</p> : null}
+      {meta ? <p className="text-sm font-semibold first-letter:uppercase text-real">{pesosEnLetras(meta)}</p> : null}
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -309,7 +309,7 @@ function Meta() {
           <br />
           <b className="tabular text-3xl">{formatCOP(confirmar)}</b>
           <br />
-          <span className="text-sm capitalize text-real">{pesosEnLetras(confirmar)}</span>
+          <span className="text-sm first-letter:uppercase text-real">{pesosEnLetras(confirmar)}</span>
         </p>
       </ConfirmModal>
     </div>
