@@ -202,7 +202,9 @@ export default function Inicio() {
         <ul className="divide-y divide-marino/10">
           {data.bancos.map((bn) => {
             const ref = bn.ultima_recogida ? new Date(bn.ultima_recogida).getTime() : EVENTO_INICIO.getTime();
-            const alerta = ahora - ref > UNA_HORA && ahora > EVENTO_INICIO.getTime();
+            // Banco general (dinero de antes del evento) no es un punto físico: no lleva alerta de recogida
+            const esGeneral = bn.nombre.trim().toLowerCase() === 'banco general';
+            const alerta = !esGeneral && ahora - ref > UNA_HORA && ahora > EVENTO_INICIO.getTime();
             return (
               <li key={bn.banco_id} className={`py-2 ${alerta ? '-mx-2 rounded-xl bg-rojo/10 px-2' : ''}`}>
                 <div className="flex items-baseline justify-between gap-2">

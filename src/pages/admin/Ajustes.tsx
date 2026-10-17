@@ -505,15 +505,27 @@ function Reinicio() {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState('');
   const [conMenu, setConMenu] = useState(false);
+  const [conservarGeneral, setConservarGeneral] = useState(true);
 
   return (
     <div>
       <ul className="mb-3 list-disc pl-5 text-sm text-marino/80">
-        <li>Borra todos los ingresos (el termómetro vuelve a 0 %).</li>
+        <li>Borra los ingresos de las pruebas (el termómetro vuelve a 0 %, o a lo que haya en Banco general).</li>
         <li>Bingos a su estado inicial; quita los bingos extra.</li>
         <li>Ningún producto agotado ni oculto.</li>
         <li>Meta en $50.000.000 y actividad vacía.</li>
       </ul>
+      <label className="mb-3 flex items-start gap-2 rounded-xl bg-verde/10 p-2 text-sm font-semibold">
+        <input
+          type="checkbox"
+          checked={conservarGeneral}
+          onChange={(e) => setConservarGeneral(e.target.checked)}
+          className="mt-0.5 h-5 w-5"
+        />
+        <span>
+          Conservar lo registrado en <b>Banco general</b> (dinero de antes del evento). Recomendado: déjelo marcado.
+        </span>
+      </label>
       <label className="mb-3 flex items-start gap-2 text-sm font-semibold">
         <input type="checkbox" checked={conMenu} onChange={(e) => setConMenu(e.target.checked)} className="mt-0.5 h-5 w-5" />
         <span>
@@ -533,14 +545,14 @@ function Reinicio() {
         deshabilitado={texto !== 'REINICIAR'}
         onCancelar={() => setAbierto(false)}
         onConfirmar={async () => {
-          if (await llamar('reiniciar_datos', { p_confirmacion: texto, p_restaurar_menu: conMenu }, 'Datos reiniciados: termómetro en 0 %')) {
+          if (await llamar('reiniciar_datos', { p_confirmacion: texto, p_restaurar_menu: conMenu, p_conservar_general: conservarGeneral }, conservarGeneral ? 'Datos reiniciados (se conservó Banco general)' : 'Datos reiniciados: termómetro en 0 %')) {
             setAbierto(false);
             setTexto('');
           }
         }}
       >
         <p>
-          Esto <b>no se puede deshacer</b>.{conMenu ? ' Incluye restaurar el menú original.' : ''} Escriba <b>REINICIAR</b> para
+          Esto <b>no se puede deshacer</b>.{conMenu ? ' Incluye restaurar el menú original.' : ''}{conservarGeneral ? ' Se conserva lo de Banco general.' : ' ⚠️ También se borra lo de Banco general.'} Escriba <b>REINICIAR</b> para
           confirmar:
         </p>
         <input

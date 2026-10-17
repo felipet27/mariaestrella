@@ -569,7 +569,15 @@ export default function Registrar() {
               </Opcion>
             ))}
           </div>
-          <p className="mt-2 text-xs text-marino/60">El último punto que usó queda seleccionado para la próxima vez.</p>
+          {banco?.nombre.trim().toLowerCase() === 'banco general' ? (
+            <p className="mt-2 rounded-lg bg-real/10 p-2 text-sm text-marino/85">
+              🏦 <b>Banco general</b> es para el dinero recibido <b>antes del evento</b> (donaciones, pagos u otros). Use{' '}
+              <b>📦 General</b> o el producto que corresponda, y escriba en la <b>nota</b> de qué fue (ej.: “donación de la familia
+              Pérez”).
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-marino/60">El último punto que usó queda seleccionado para la próxima vez.</p>
+          )}
         </Tarjeta>
       )}
 

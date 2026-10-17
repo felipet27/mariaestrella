@@ -27,6 +27,7 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
 6. **SQL Editor** → correr [supabase/002_ajustes_felipe.sql](supabase/002_ajustes_felipe.sql) (sección ⚙️ Ajustes, solo para felipe). Debe listar 4 funciones.
    Luego correr [supabase/003_frases_y_bingos.sql](supabase/003_frases_y_bingos.sql) (frases editables y bingos jugados no se repiten).
    Luego [supabase/004_corregir_reinicio.sql](supabase/004_corregir_reinicio.sql) y [supabase/005_desglose_productos.sql](supabase/005_desglose_productos.sql) (desglose por producto).
+   Luego [supabase/006_banco_general.sql](supabase/006_banco_general.sql) (Banco general para el dinero de antes del evento).
 7. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
    La `service_role` **nunca** se usa en este proyecto.
 
