@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Tarjeta } from '../../components/AdminLayout';
+import { Ayuda, GuiaRapida, Tarjeta } from '../../components/AdminLayout';
+import { useAuth } from '../../lib/auth';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useBingosAdmin, useTablero } from '../../lib/useAdmin';
 import { useAhora } from '../../lib/useProgreso';
@@ -42,6 +43,7 @@ function Cifra({
 }
 
 export default function Inicio() {
+  const { esEditor } = useAuth();
   const { data, error, conectado } = useTablero();
   const { data: bingos } = useBingosAdmin();
   const ahora = useAhora(30_000);
@@ -60,35 +62,70 @@ export default function Inicio() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-3xl font-bold text-marino">Resumen</h1>
+        <h1 className="font-serif text-3xl font-bold text-marino">Resumen del día</h1>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-marino/60">
           <span className={`h-2 w-2 rounded-full ${conectado ? 'bg-verde' : 'bg-rojo'}`} />
           {conectado ? 'En vivo' : 'Reconectando…'}
         </span>
       </div>
 
+      <GuiaRapida id="inicio" titulo="¿Cómo uso el panel? (guía rápida)">
+        <ol className="list-decimal space-y-1.5 pl-5">
+          <li>
+            Cuando recoja dinero de un <b>banco</b> o del <b>Almacén</b>, o reciba una <b>donación</b> o un <b>remate</b>: toque{' '}
+            <b>➕ Registrar</b>. El termómetro de la pantalla sube solo.
+          </li>
+          <li>
+            Si un producto se acaba: <b>🍽️ Productos</b> → toque <b>Agotado</b>. En la pantalla aparece tachado.
+          </li>
+          <li>
+            Cuando empiece un bingo: <b>🎱 Bingos</b> → <b>Iniciar juego</b>. Al terminar: <b>Terminar juego</b>.
+          </li>
+          <li>
+            ¿Se equivocó en un registro? <b>📋 Historial</b> → <b>Corregir</b>.
+            {!esEditor && ' (Pídaselo a Angela, Johana o Felipe: solo ellos pueden corregir.)'}
+          </li>
+          <li>Sin señal no pasa nada: el registro se guarda en el celular y se envía solo cuando vuelva.</li>
+        </ol>
+        <p className="mt-2 text-xs text-marino/60">El público nunca ve montos, solo el porcentaje del termómetro.</p>
+      </GuiaRapida>
+
       <Link
         to="/admin/registrar"
-        className="flex h-16 items-center justify-center rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-md active:scale-[0.99]"
+        className="flex h-16 flex-col items-center justify-center rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-md active:scale-[0.99]"
       >
-        + Registrar
+        ➕ Registrar ingreso
+        <span className="text-xs font-semibold text-marino/70">Recaudo de banco, donación o remate</span>
       </Link>
 
       {b && (
         <div className="grid grid-cols-2 gap-2">
-          <Cifra etiqueta="Neto real" valor={formatCOP(b.neto)} destacado />
-          <Cifra etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} />
-          <Cifra etiqueta="Meta" valor={formatCOP(b.meta)} />
-          <Cifra etiqueta="Avance (público)" valor={`${Math.min(100, pct)} %${pct > 100 ? ` (real ${pct} %)` : ''}`} />
+          <Cifra
+            etiqueta="Neto real"
+            valor={formatCOP(b.neto)}
+            destacado
+            nota="Todo lo que ha entrado, menos los premios de bingo ya pagados"
+          />
+          <Cifra etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} nota="Todo lo que ha entrado hoy" />
+          <Cifra etiqueta="Meta" valor={formatCOP(b.meta)} nota="Lo que queremos recoger" />
+          <Cifra
+            etiqueta="Avance"
+            valor={`${Math.min(100, pct)} %${pct > 100 ? ` (real ${pct} %)` : ''}`}
+            nota="Lo que ve el público en el termómetro"
+          />
           {metaCumplida ? (
-            <Cifra etiqueta="Meta cumplida · excedente" valor={`+ ${formatCOP(b.excedente)}`} tono="verde" />
+            <Cifra etiqueta="¡Meta cumplida! Excedente" valor={`+ ${formatCOP(b.excedente)}`} tono="verde" nota="Lo recogido por encima de la meta" />
           ) : (
-            <Cifra etiqueta="Faltante" valor={formatCOP(b.faltante)} />
+            <Cifra etiqueta="Faltante" valor={formatCOP(b.faltante)} nota="Lo que falta para la meta" />
           )}
         </div>
       )}
 
       <Tarjeta titulo="Por punto de recaudo">
+        <Ayuda className="mb-2">
+          Cuánto se ha recogido de cada banco. Si un punto aparece en <b className="text-rojo">rojo</b>, lleva más de 1 hora sin
+          que nadie recoja el dinero: vaya a recogerlo y regístrelo.
+        </Ayuda>
         <ul className="divide-y divide-marino/10">
           {data.bancos.map((bn) => {
             const ref = bn.ultima_recogida ? new Date(bn.ultima_recogida).getTime() : EVENTO_INICIO.getTime();
@@ -112,6 +149,7 @@ export default function Inicio() {
                         : ''}
                   </span>
                 </div>
+                {alerta && <div className="mt-1 text-xs font-bold text-rojo">⚠️ Vaya a recoger el dinero de este punto</div>}
               </li>
             );
           })}
@@ -157,7 +195,8 @@ export default function Inicio() {
         </ul>
         {pendientes.length > 0 && (
           <p className="mt-2 text-sm font-bold text-rojo">
-            {pendientes.length} premio{pendientes.length > 1 ? 's' : ''} por marcar como entregado.
+            {pendientes.length} premio{pendientes.length > 1 ? 's' : ''} sin marcar como entregado
+            {esEditor ? ': vaya a Bingos → Premio entregado.' : ': avísele a un editor.'}
           </p>
         )}
       </Tarjeta>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import MontoInput from '../../components/MontoInput';
-import { Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
@@ -19,7 +19,23 @@ interface Edicion {
   valor_carton: number | null;
 }
 
-const ESTADO: Record<string, string> = { programado: 'Programado', en_juego: '🎱 En juego', finalizado: 'Finalizado' };
+const ESTADO: Record<string, string> = { programado: 'Por jugar', en_juego: '🎱 En juego', finalizado: 'Terminado' };
+
+/** Línea de pasos: Por jugar → En juego → Terminado → Premio pagado. */
+function Pasos({ bingo }: { bingo: Bingo }) {
+  const actual = bingo.premio_entregado ? 3 : bingo.estado === 'finalizado' ? 2 : bingo.estado === 'en_juego' ? 1 : 0;
+  const pasos = ['Por jugar', 'En juego', 'Terminado', 'Premio pagado'];
+  return (
+    <ol className="mt-3 grid grid-cols-4 gap-1 text-center text-[11px] font-semibold">
+      {pasos.map((p, i) => (
+        <li key={p}>
+          <div className={`h-1.5 rounded-full ${i <= actual ? (i === 3 ? 'bg-verde' : 'bg-dorado') : 'bg-marino/10'}`} />
+          <div className={`mt-1 ${i === actual ? 'font-extrabold text-marino' : 'text-marino/45'}`}>{p}</div>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function Bingos() {
   const { esEditor } = useAuth();
@@ -71,9 +87,23 @@ export default function Bingos() {
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold text-marino">Bingos</h1>
-      <p className="text-sm text-marino/70">
-        “Iniciar” muestra el banner <b>¡BINGO EN JUEGO!</b> en la pantalla. Solo puede haber uno en juego a la vez.
-      </p>
+      <GuiaRapida id="bingos" titulo="¿Cómo se maneja un bingo?">
+        <ol className="list-decimal space-y-1.5 pl-5">
+          <li>
+            Cuando vaya a empezar, toque <b>▶ Iniciar juego</b>. En la pantalla grande aparece “¡BINGO EN JUEGO!” con el premio.
+          </li>
+          <li>
+            Cuando alguien cante bingo, toque <b>■ Terminar juego</b>. El aviso desaparece de la pantalla.
+          </li>
+          <li>
+            Al pagarle el premio al ganador, un editor toca <b>💰 Premio entregado</b>. Así se descuenta del neto.
+          </li>
+        </ol>
+        <p className="mt-2 text-xs text-marino/60">
+          Solo puede haber un bingo en juego a la vez. Si el Gran Bingo se atrasa, use <b>Cambiar hora o premio</b> y la cuenta
+          regresiva de la pantalla se ajusta sola.
+        </p>
+      </GuiaRapida>
 
       {bingos.map((b) => (
         <Tarjeta key={b.id} className={b.estado === 'en_juego' ? 'ring-4 ring-dorado' : ''}>
@@ -89,14 +119,23 @@ export default function Bingos() {
             </div>
           </div>
 
+          <Pasos bingo={b} />
+
           {b.premio_entregado ? (
             <p className="mt-2 rounded-xl bg-verde/10 px-3 py-2 text-sm font-semibold text-verde">
               ✓ Premio entregado · {nombrePerfil(perfiles, b.premio_entregado_por)} · {formatHora(b.premio_entregado_en)}
             </p>
           ) : (
             b.estado === 'finalizado' && (
-              <p className="mt-2 rounded-xl bg-rojo/10 px-3 py-2 text-sm font-bold text-rojo">Premio pendiente de entregar</p>
+              <p className="mt-2 rounded-xl bg-rojo/10 px-3 py-2 text-sm font-bold text-rojo">
+                Premio pendiente de entregar{esEditor ? '' : ' · avísele a un editor'}
+              </p>
             )
+          )}
+          {b.estado === 'en_juego' && (
+            <p className="mt-2 rounded-xl bg-dorado/20 px-3 py-2 text-sm font-bold">
+              🎱 Se está jugando ahora. Cuando alguien cante bingo, toque “Terminar juego”.
+            </p>
           )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -107,7 +146,7 @@ export default function Bingos() {
                 onClick={() => estado(b, 'en_juego', `${b.nombre} en juego`)}
                 className="h-12 rounded-xl bg-dorado font-extrabold text-marino disabled:opacity-50"
               >
-                {b.estado === 'finalizado' ? 'Reiniciar juego' : 'Iniciar'}
+                {b.estado === 'finalizado' ? '▶ Jugar de nuevo' : '▶ Iniciar juego'}
               </button>
             )}
             {b.estado === 'en_juego' && (
@@ -117,7 +156,7 @@ export default function Bingos() {
                 onClick={() => estado(b, 'finalizado', `${b.nombre} finalizado`)}
                 className="h-12 rounded-xl bg-marino font-extrabold text-crema disabled:opacity-50"
               >
-                Finalizar
+                ■ Terminar juego
               </button>
             )}
             <button
@@ -132,9 +171,9 @@ export default function Bingos() {
                   valor_carton: b.valor_carton,
                 })
               }
-              className="h-12 rounded-xl border-2 border-marino/15 bg-white font-bold"
+              className="h-12 rounded-xl border-2 border-marino/15 bg-white text-sm font-bold"
             >
-              Editar
+              ✏️ Cambiar hora o premio
             </button>
             {b.estado === 'finalizado' && !b.premio_entregado && (
               <button
@@ -143,7 +182,7 @@ export default function Bingos() {
                 onClick={() => estado(b, 'programado', `${b.nombre} vuelve a programado`)}
                 className="h-12 rounded-xl border-2 border-marino/15 bg-white text-sm font-bold"
               >
-                Volver a programado
+                ↩ Volver a “Por jugar”
               </button>
             )}
             {esEditor && (
@@ -155,7 +194,7 @@ export default function Bingos() {
                   b.premio_entregado ? 'border-2 border-rojo/40 text-rojo' : 'bg-verde text-white'
                 }`}
               >
-                {b.premio_entregado ? 'Desmarcar premio (fue un error)' : 'Premio entregado'}
+                {b.premio_entregado ? 'Desmarcar premio (fue un error)' : '💰 Premio entregado'}
               </button>
             )}
           </div>

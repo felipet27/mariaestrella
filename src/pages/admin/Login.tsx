@@ -45,6 +45,7 @@ export default function Login() {
           <input
             value={usuario}
             onChange={(e) => setUsuario(e.target.value)}
+            placeholder="Ej.: felipe"
             autoCapitalize="none"
             autoCorrect="off"
             autoComplete="username"
@@ -75,6 +76,11 @@ export default function Login() {
           {enviando ? 'Ingresando…' : 'Ingresar'}
         </button>
       </form>
+      <p className="mt-6 text-center text-sm text-marino/60">
+        Escriba solo su nombre de usuario, por ejemplo <b>felipe</b>.
+        <br />
+        ¿Olvidó la contraseña? Pídasela a Felipe.
+      </p>
     </main>
   );
 }

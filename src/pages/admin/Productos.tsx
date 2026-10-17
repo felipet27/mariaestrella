@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import MontoInput from '../../components/MontoInput';
-import { Opcion } from '../../components/AdminLayout';
+import { Ayuda, Opcion } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useLiveQuery } from '../../lib/useLiveQuery';
@@ -91,7 +91,21 @@ export default function Productos() {
           + Nuevo producto
         </button>
       </div>
-      <p className="text-sm text-marino/70">Toque “Agotado” y en la pantalla aparece tachado al instante. Toque el nombre para editar.</p>
+      <Ayuda>
+        Esta es la lista de precios que se ve en la <b>pantalla grande</b> y en los celulares. Todo cambio aparece en segundos.
+      </Ayuda>
+      <ul className="space-y-1 rounded-2xl border border-dorado/30 bg-white px-4 py-3 text-sm text-marino/85">
+        <li>
+          <b className="text-rojo">✕ Agotado</b>: el producto se ve tachado en la pantalla. Cuando vuelva a haber, toque{' '}
+          <b className="text-verde">✓ Disponible</b>.
+        </li>
+        <li>
+          <b>Toque el nombre</b> de un producto para cambiar su precio o su nombre.
+        </li>
+        <li>
+          <b>+ Nuevo producto</b>: para agregar algo que no está en la lista (por ejemplo, un postre nuevo).
+        </li>
+      </ul>
 
       {(Object.keys(CATEGORIAS) as Categoria[]).map((cat) => {
         const items = activos.filter((p) => p.categoria === cat);
@@ -117,19 +131,39 @@ export default function Productos() {
                     <div className={`truncate font-bold ${p.agotado ? 'text-marino/50 line-through' : ''}`}>
                       {p.emoji} {p.nombre}
                     </div>
-                    <div className="tabular text-sm text-marino/70">{formatCOP(p.precio)}</div>
+                    <div className="tabular text-sm text-marino/70">
+                      {formatCOP(p.precio)} <span className="text-xs text-real/70">· ✏️ editar</span>
+                    </div>
                   </button>
-                  <button
-                    type="button"
-                    disabled={ocupadoId === p.id}
-                    onClick={() => disponibilidad(p, !p.agotado, true)}
-                    aria-pressed={p.agotado}
-                    className={`h-12 w-28 shrink-0 rounded-xl text-sm font-extrabold transition-colors disabled:opacity-50 ${
-                      p.agotado ? 'bg-rojo text-white' : 'border-2 border-marino/15 bg-crema text-marino'
-                    }`}
+                  {/* Dos botones: el activo se ve lleno de color */}
+                  <div
+                    role="group"
+                    aria-label={`Disponibilidad de ${p.nombre}`}
+                    className={`grid shrink-0 grid-cols-2 gap-1 rounded-xl bg-crema p-1 ${ocupadoId === p.id ? 'opacity-50' : ''}`}
                   >
-                    {p.agotado ? 'AGOTADO' : 'Disponible'}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={ocupadoId === p.id || !p.agotado}
+                      onClick={() => disponibilidad(p, false, true)}
+                      aria-pressed={!p.agotado}
+                      className={`h-11 rounded-lg px-2.5 text-xs font-extrabold transition-colors ${
+                        !p.agotado ? 'bg-verde text-white shadow' : 'text-marino/50 active:bg-verde/10'
+                      }`}
+                    >
+                      ✓ Disponible
+                    </button>
+                    <button
+                      type="button"
+                      disabled={ocupadoId === p.id || p.agotado}
+                      onClick={() => disponibilidad(p, true, true)}
+                      aria-pressed={p.agotado}
+                      className={`h-11 rounded-lg px-2.5 text-xs font-extrabold transition-colors ${
+                        p.agotado ? 'bg-rojo text-white shadow' : 'text-marino/50 active:bg-rojo/10'
+                      }`}
+                    >
+                      ✕ Agotado
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -139,7 +173,8 @@ export default function Productos() {
 
       {ocultos.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wider text-marino/50">Ocultos del menú</h2>
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-marino/50">Ocultos del menú</h2>
+          <p className="mb-2 text-xs text-marino/60">No se ven en la pantalla. Toque “Mostrar” para que vuelvan a aparecer.</p>
           <ul className="space-y-2">
             {ocultos.map((p) => (
               <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-marino/10 bg-white/60 p-2 pl-3">
@@ -229,8 +264,13 @@ export default function Productos() {
                 }}
                 className="mt-3 h-12 w-full rounded-2xl text-sm font-bold text-rojo"
               >
-                Ocultar del menú (por error de digitación)
+                Ocultar del menú
               </button>
+            )}
+            {original && (
+              <p className="text-center text-xs text-marino/55">
+                Ocultar es para productos creados por error o que no se van a vender. Si solo se acabó, use “Agotado”.
+              </p>
             )}
           </div>
         </div>

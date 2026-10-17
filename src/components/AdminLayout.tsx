@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { usePendientes } from '../lib/pendientes';
@@ -16,12 +16,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { pendientes } = usePendientes(true, alEnviar);
 
   const links = [
-    { to: '/admin', label: 'Inicio', end: true },
-    { to: '/admin/registrar', label: '+ Registrar' },
-    { to: '/admin/historial', label: 'Historial' },
-    { to: '/admin/productos', label: 'Productos' },
-    { to: '/admin/bingos', label: 'Bingos' },
-    { to: '/admin/reportes', label: 'Reportes' },
+    { to: '/admin', label: '🏠 Inicio', end: true },
+    { to: '/admin/registrar', label: '➕ Registrar' },
+    { to: '/admin/historial', label: '📋 Historial' },
+    { to: '/admin/productos', label: '🍽️ Productos' },
+    { to: '/admin/bingos', label: '🎱 Bingos' },
+    { to: '/admin/reportes', label: '📊 Reportes' },
     ...(perfil?.usuario === 'felipe' ? [{ to: '/admin/pruebas', label: '🧪 Pruebas' }] : []),
   ];
 
@@ -84,16 +84,18 @@ export function Tarjeta({ titulo, children, className = '' }: { titulo?: ReactNo
   );
 }
 
-/** Botón grande de opción (tipo, banco, medio). */
+/** Botón grande de opción (tipo, banco, medio). `sub` = explicación corta debajo. */
 export function Opcion({
   activo,
   onClick,
   children,
+  sub,
   className = '',
 }: {
   activo: boolean;
   onClick: () => void;
   children: ReactNode;
+  sub?: ReactNode;
   className?: string;
 }) {
   return (
@@ -101,11 +103,52 @@ export function Opcion({
       type="button"
       onClick={onClick}
       aria-pressed={activo}
-      className={`min-h-14 rounded-2xl border-2 px-3 text-base font-bold transition-colors ${
+      className={`flex min-h-14 flex-col items-center justify-center rounded-2xl border-2 px-2 py-2 text-base font-bold leading-tight transition-colors ${
         activo ? 'border-dorado bg-dorado text-marino shadow' : 'border-marino/15 bg-white text-marino active:bg-marino/5'
       } ${className}`}
     >
       {children}
+      {sub && <span className={`mt-1 text-[11px] font-medium leading-snug ${activo ? 'text-marino/80' : 'text-marino/55'}`}>{sub}</span>}
     </button>
+  );
+}
+
+/** Pista sutil: explica qué hace una sección o un control. */
+export function Ayuda({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={`flex gap-2 rounded-xl bg-real/[0.07] px-3 py-2 text-sm leading-snug text-marino/80 ${className}`}>
+      <span aria-hidden="true">💡</span>
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** Bloque desplegable "¿Cómo funciona?" que recuerda si el usuario lo cerró. */
+export function GuiaRapida({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
+  const clave = `guia:${id}`;
+  const [abierta, setAbierta] = useState(() => {
+    try {
+      return localStorage.getItem(clave) !== 'cerrada';
+    } catch {
+      return true;
+    }
+  });
+  const cambiar = () => {
+    const nueva = !abierta;
+    setAbierta(nueva);
+    try {
+      localStorage.setItem(clave, nueva ? 'abierta' : 'cerrada');
+    } catch {
+      /* sin almacenamiento */
+    }
+  };
+  return (
+    <section className="rounded-2xl border-2 border-real/20 bg-white/70">
+      <button type="button" onClick={cambiar} className="flex w-full items-center justify-between px-4 py-3 text-left">
+        <span className="font-bold text-real">📖 {titulo}</span>
+        <span className="text-sm font-semibold text-real/70">{abierta ? 'Ocultar ▲' : 'Ver ▼'}</span>
+      </button>
+      {abierta && <div className="px-4 pb-4 text-sm leading-relaxed text-marino/85">{children}</div>}
+    </section>
   );
 }

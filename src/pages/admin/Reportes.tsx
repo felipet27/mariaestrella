@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Tarjeta } from '../../components/AdminLayout';
+import { Ayuda, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useBancos, useBingosAdmin, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
 import { useLiveQuery } from '../../lib/useLiveQuery';
@@ -176,6 +176,10 @@ export default function Reportes() {
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold text-marino">Reportes</h1>
+      <Ayuda>
+        Resumen para el cierre del día. Al final del evento descargue los dos archivos CSV: se abren en Excel y sirven de respaldo
+        (todos los registros y quién hizo cada cambio).
+      </Ayuda>
 
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={exportarIngresos} className="h-12 rounded-xl bg-real font-bold text-crema">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../../components/ConfirmModal';
+import { Ayuda } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
@@ -83,6 +84,17 @@ export default function Historial() {
   return (
     <div className="space-y-3">
       <h1 className="font-serif text-3xl font-bold text-marino">Historial</h1>
+      <Ayuda>
+        Aquí está todo lo que se ha registrado hoy, lo más reciente arriba. Nada se borra: si algo quedó mal,{' '}
+        {esEditor ? (
+          <>
+            use <b>Corregir</b> (anula el registro y abre el formulario con los mismos datos para arreglarlos) o <b>Anular</b> (si
+            no debía registrarse). Siempre se pide el motivo.
+          </>
+        ) : (
+          <>avísele a Angela, Johana o Felipe: solo ellos pueden anular o corregir.</>
+        )}
+      </Ayuda>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <select value={fTipo} onChange={(e) => setFTipo(e.target.value)} className={sel}>
@@ -120,7 +132,7 @@ export default function Historial() {
       </div>
       <label className="flex items-center gap-2 text-sm font-semibold">
         <input type="checkbox" checked={conAnulados} onChange={(e) => setConAnulados(e.target.checked)} className="h-5 w-5" />
-        Incluir anulados
+        Mostrar también los anulados (aparecen tachados)
       </label>
 
       <p className="text-sm text-marino/70">
@@ -157,16 +169,18 @@ export default function Historial() {
                 <button
                   type="button"
                   onClick={() => setAnular({ ingreso: i, corregir: false })}
-                  className="h-11 flex-1 rounded-xl border-2 border-rojo/40 text-sm font-bold text-rojo"
+                  className="flex h-12 flex-1 flex-col items-center justify-center rounded-xl border-2 border-rojo/40 text-sm font-bold leading-tight text-rojo"
                 >
-                  Anular
+                  ✕ Anular
+                  <span className="text-[10px] font-medium opacity-75">No debía registrarse</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setAnular({ ingreso: i, corregir: true })}
-                  className="h-11 flex-1 rounded-xl border-2 border-real/40 text-sm font-bold text-real"
+                  className="flex h-12 flex-1 flex-col items-center justify-center rounded-xl border-2 border-real/40 text-sm font-bold leading-tight text-real"
                 >
-                  Corregir
+                  ✏️ Corregir
+                  <span className="text-[10px] font-medium opacity-75">Monto o datos equivocados</span>
                 </button>
               </div>
             )}

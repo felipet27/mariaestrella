@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Opcion, Tarjeta } from '../../components/AdminLayout';
+import { Ayuda, Opcion, Tarjeta } from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import { useBancos } from '../../lib/useAdmin';
 import { mensajeError } from '../../lib/supabase';
@@ -10,6 +10,17 @@ import { formatCOP, formatHora, MEDIOS, TIPOS } from '../../lib/format';
 import { pesosEnLetras } from '../../lib/letras';
 import { agregarPendiente, enviarIngreso, esErrorDeRed, quitarPendiente, usePendientes } from '../../lib/pendientes';
 import type { MedioPago, TipoIngreso } from '../../lib/tipos';
+
+const SUB_TIPO: Record<TipoIngreso, string> = {
+  recaudo_banco: 'Dinero recogido en un banco o el Almacén',
+  donacion: 'Alguien da dinero directamente',
+  remate: 'Lo que pagaron en un remate',
+};
+
+const SUB_MEDIO: Record<MedioPago, string> = {
+  efectivo: 'Billetes y monedas',
+  transferencia: 'Solo si ya verificó el pago por WhatsApp',
+};
 
 const LIMITE_DOBLE = 5_000_000;
 const CLAVE_BANCO = 'ultimoBanco';
@@ -214,19 +225,26 @@ export default function Registrar() {
         </p>
       )}
 
-      <Tarjeta titulo="1. Tipo">
+      <Ayuda>
+        Use esta pantalla cada vez que <b>recoja dinero</b> de un banco o del Almacén, o reciba una donación o un remate. Antes de
+        guardar le mostramos el monto en grande para que lo confirme.
+      </Ayuda>
+
+      <Tarjeta titulo="1. ¿Qué va a registrar?">
         <div className="grid grid-cols-3 gap-2">
           {(Object.keys(TIPOS) as TipoIngreso[]).map((t) => (
-            <Opcion key={t} activo={tipo === t} onClick={() => setTipo(t)}>
+            <Opcion key={t} activo={tipo === t} onClick={() => setTipo(t)} sub={SUB_TIPO[t]}>
               {t === 'recaudo_banco' ? 'Recaudo de banco' : TIPOS[t]}
             </Opcion>
           ))}
         </div>
-        <p className="mt-2 text-xs text-marino/60">Las tablas de bingo se pagan en el banco: entran en el recaudo del banco.</p>
+        <p className="mt-2 text-xs text-marino/60">
+          Las tablas de bingo se pagan en los bancos, así que ya van incluidas en el recaudo del banco: no las registre aparte.
+        </p>
       </Tarjeta>
 
       {tipo === 'recaudo_banco' && (
-        <Tarjeta titulo="2. Punto">
+        <Tarjeta titulo="2. ¿De qué punto lo recogió?">
           <div className="grid grid-cols-2 gap-2">
             {bancosActivos.map((b) => (
               <Opcion key={b.id} activo={bancoId === b.id} onClick={() => setBancoId(b.id)} className="text-lg">
@@ -234,18 +252,23 @@ export default function Registrar() {
               </Opcion>
             ))}
           </div>
+          <p className="mt-2 text-xs text-marino/60">El último punto que usó queda seleccionado para la próxima vez.</p>
         </Tarjeta>
       )}
 
-      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 3 : 2}. Monto`}>
+      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 3 : 2}. ¿Cuánto dinero es?`}>
         <MontoInput valor={monto} onChange={setMonto} />
-        {monto ? <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(monto)}</p> : null}
+        {monto ? (
+          <p className="mt-1 text-sm font-semibold capitalize text-real">{pesosEnLetras(monto)}</p>
+        ) : (
+          <p className="mt-2 text-xs text-marino/60">Escriba el total que contó. Los botones de abajo suman al valor que ya tiene.</p>
+        )}
       </Tarjeta>
 
-      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 4 : 3}. Medio de pago`}>
+      <Tarjeta titulo={`${tipo === 'recaudo_banco' ? 4 : 3}. ¿Cómo se pagó?`}>
         <div className="grid grid-cols-2 gap-2">
           {(Object.keys(MEDIOS) as MedioPago[]).map((m) => (
-            <Opcion key={m} activo={medio === m} onClick={() => setMedio(m)}>
+            <Opcion key={m} activo={medio === m} onClick={() => setMedio(m)} sub={SUB_MEDIO[m]}>
               {MEDIOS[m]}
             </Opcion>
           ))}
@@ -258,7 +281,13 @@ export default function Registrar() {
           onChange={(e) => setNota(e.target.value)}
           rows={2}
           maxLength={300}
-          placeholder={tipo === 'remate' ? 'Opcional: del remate solo importa el monto' : 'Opcional'}
+          placeholder={
+            tipo === 'remate'
+              ? 'Opcional. Ej.: remate de la torta'
+              : tipo === 'donacion'
+                ? 'Opcional. Ej.: donación de la familia Pérez'
+                : 'Opcional. Ej.: incluye 10 tablas de bingo'
+          }
           className="w-full rounded-xl border-2 border-marino/15 bg-white p-3 text-base outline-none focus:border-dorado"
         />
       </Tarjeta>
