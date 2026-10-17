@@ -4,6 +4,7 @@ import Termometro from '../components/Termometro';
 import Confeti from '../components/Confeti';
 import MenuProductos from '../components/MenuProductos';
 import BingosPanel, { faltaGranBingo, mmss } from '../components/BingosPanel';
+import Publico from './Publico';
 import {
   granBingo,
   MENSAJES_HITO,
@@ -111,7 +112,23 @@ function EstrellaGrande() {
   );
 }
 
+/** Celular o pantalla vertical: la proyección 16:9 no sirve ahí, se muestra la versión móvil. */
+function useEsMovil() {
+  const calc = () => window.innerWidth < 900 || window.innerHeight > window.innerWidth;
+  const [movil, setMovil] = useState(calc);
+  useEffect(() => {
+    const r = () => setMovil(calc());
+    window.addEventListener('resize', r);
+    return () => window.removeEventListener('resize', r);
+  }, []);
+  return movil;
+}
+
 export default function Pantalla() {
+  return useEsMovil() ? <Publico /> : <Proyeccion />;
+}
+
+function Proyeccion() {
   const escala = useEscala();
   const cursor = useCursorVisible();
   useWakeLock();
@@ -246,11 +263,17 @@ export default function Pantalla() {
             <section className="flex min-w-0 flex-1 flex-col">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="font-serif text-[46px] font-bold leading-none text-dorado-claro">Bingos de hoy</h2>
-                {config?.horario && (
-                  <div className="rounded-full border-2 border-dorado/70 bg-marino/50 px-6 py-2 text-[26px] font-bold text-crema">
-                    🕗 {config.horario}
+                <div className="flex items-center gap-3">
+                  {config?.horario && (
+                    <div className="rounded-full border-2 border-dorado/50 bg-marino/40 px-5 py-2 text-[22px] font-semibold text-crema/85">
+                      Evento: {config.horario}
+                    </div>
+                  )}
+                  {/* Reloj en vivo (hora de Bogotá) */}
+                  <div className="tabular rounded-full border-2 border-dorado bg-marino/70 px-6 py-1.5 text-[34px] font-black text-dorado-claro">
+                    🕐 {formatHora(ahora)}
                   </div>
-                )}
+                </div>
               </div>
               <div className="h-[230px] shrink-0">{bingos && <BingosPanel bingos={bingos} ahora={ahora} />}</div>
 
