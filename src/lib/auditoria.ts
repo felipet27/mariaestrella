@@ -178,6 +178,7 @@ export function describirAuditoria(a: Auditoria, ctx: Contexto): EventoAuditoria
         mensaje_meta: 'el mensaje de la meta',
         instrucciones: 'las instrucciones',
         horario: 'el horario',
+        frases: 'las frases que rotan',
       };
       const cambiados = Object.keys(nombres).filter(cambio).map((k) => nombres[k]);
       if (!cambiados.length) return null;

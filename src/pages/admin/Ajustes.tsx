@@ -124,6 +124,133 @@ function Textos() {
   );
 }
 
+// ---------------------------------------------------------------- Lo que ve la gente
+const FRASES_BASE = [
+  '🎟️ Pregunte por las tablas de bingo en los Bancos 1, 2 y 3',
+  '🪙 Cambie sus fichas en los Bancos 1, 2 y 3',
+  '🙏 Cada ficha ayuda a terminar nuestra parroquia',
+  '🛍️ Visite el Almacén: ¡hay de todo!',
+  '⛪ Juntos estamos construyendo la casa de Dios',
+  '📱 Escanee el código y siga el termómetro desde su celular',
+  '💛 Comparta el termómetro con su familia por WhatsApp',
+];
+
+function LoQueVe() {
+  const { data: config, refetch } = useConfigPublica();
+  const { llamar, ocupado } = useRpc();
+  const [frases, setFrases] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (config && frases === null) setFrases(config.frases?.length ? [...config.frases] : [...FRASES_BASE]);
+  }, [config, frases]);
+
+  const lista = frases ?? [];
+  const cambiar = (i: number, v: string) => setFrases(lista.map((f, j) => (j === i ? v : f)));
+  const mover = (i: number, d: -1 | 1) => {
+    const j = i + d;
+    if (j < 0 || j >= lista.length) return;
+    const n = [...lista];
+    [n[i], n[j]] = [n[j], n[i]];
+    setFrases(n);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        <a
+          href="/pantalla"
+          target="_blank"
+          rel="noopener"
+          className="flex h-14 flex-col items-center justify-center rounded-xl bg-real text-sm font-extrabold text-crema"
+        >
+          📺 Ver la pantalla
+          <span className="text-[10px] font-medium text-crema/75">Lo que se proyecta</span>
+        </a>
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener"
+          className="flex h-14 flex-col items-center justify-center rounded-xl border-2 border-real/30 text-sm font-extrabold text-real"
+        >
+          📱 Ver el celular
+          <span className="text-[10px] font-medium text-real/70">Lo que ve el público</span>
+        </a>
+      </div>
+
+      <div>
+        <div className="text-sm font-bold text-marino">Frases de la franja inferior de la pantalla</div>
+        <p className="mb-2 text-xs text-marino/60">
+          Rotan cada 8 segundos. Entre ellas aparecen solas las frases en vivo: el avance (%), el próximo bingo, el Gran Bingo y
+          un producto del menú. Máximo 90 letras por frase.
+        </p>
+        {config && config.frases === undefined && (
+          <p className="mb-2 rounded-lg bg-rojo/10 p-2 text-xs font-semibold text-rojo">
+            Para guardar frases falta correr supabase/003_frases_y_bingos.sql en Supabase.
+          </p>
+        )}
+        <ol className="space-y-2">
+          {lista.map((f, i) => (
+            <li key={i} className="flex items-center gap-1">
+              <div className="flex shrink-0 flex-col">
+                <button type="button" onClick={() => mover(i, -1)} className="h-6 w-7 text-xs text-marino/50" aria-label="Subir">
+                  ▲
+                </button>
+                <button type="button" onClick={() => mover(i, 1)} className="h-6 w-7 text-xs text-marino/50" aria-label="Bajar">
+                  ▼
+                </button>
+              </div>
+              <input
+                value={f}
+                maxLength={90}
+                onChange={(e) => cambiar(i, e.target.value)}
+                className="h-11 min-w-0 flex-1 rounded-lg border-2 border-dorado/40 bg-white px-2 text-sm outline-none focus:border-dorado"
+              />
+              <button
+                type="button"
+                onClick={() => setFrases(lista.filter((_, j) => j !== i))}
+                className="h-11 w-9 shrink-0 rounded-lg text-rojo"
+                aria-label="Quitar frase"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setFrases([...lista, ''])}
+            className="h-11 rounded-xl border-2 border-dashed border-real/30 text-sm font-bold text-real"
+          >
+            + Agregar frase
+          </button>
+          <button
+            type="button"
+            onClick={() => setFrases([...FRASES_BASE])}
+            className="h-11 rounded-xl text-xs font-bold text-marino/60"
+          >
+            Restaurar las originales
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={ocupado || !lista.some((f) => f.trim())}
+          onClick={async () => {
+            if (await llamar('guardar_frases', { p_frases: lista }, '✓ Frases guardadas: ya rotan en la pantalla')) refetch();
+          }}
+          className="mt-3 h-12 w-full rounded-xl bg-dorado font-extrabold text-marino shadow disabled:opacity-50"
+        >
+          {ocupado ? 'Guardando…' : 'Guardar frases'}
+        </button>
+      </div>
+      <p className="text-xs text-marino/60">
+        Cada 20 minutos la pantalla hace un “repaso”: el termómetro baja y vuelve a subir hasta el valor real, con el mensaje
+        “¡Así vamos!”. Para verlo ya, abra la pantalla con <b>/pantalla?repaso=30</b> (lo hace cada 30 segundos).
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Meta
 function Meta() {
   const { data: metaActual, refetch } = useLiveQuery<number | null>(
@@ -439,6 +566,9 @@ export default function Ajustes() {
         Solo usted (Felipe) ve esta sección. Todo cambio se aplica al instante en la pantalla y en los celulares.
       </p>
 
+      <Seccion icono="📺" titulo="Lo que ve la gente" desc="Ver la pantalla y el celular, y editar las frases que rotan">
+        <LoQueVe />
+      </Seccion>
       <Seccion icono="📝" titulo="Textos de la pantalla" desc="Título, causa, instrucciones, horario y mensaje de la meta">
         <Textos />
       </Seccion>

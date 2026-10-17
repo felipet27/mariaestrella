@@ -17,11 +17,8 @@ export function useConfigPublica() {
     ['config_publica'],
     () =>
       q(
-        supabase
-          .from('config_publica')
-          .select('titulo, subtitulo, causa, mensaje_meta, instrucciones, horario, logo_url')
-          .eq('id', 1)
-          .maybeSingle(),
+        // '*' para que funcione con o sin la columna "frases" (003)
+        supabase.from('config_publica').select('*').eq('id', 1).maybeSingle(),
       ),
     { intervalo: 60_000 },
   );

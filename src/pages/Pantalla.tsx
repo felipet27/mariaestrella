@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Termometro from '../components/Termometro';
 import Confeti from '../components/Confeti';
@@ -112,6 +112,44 @@ function EstrellaGrande() {
   );
 }
 
+const FRASES_BASE = [
+  '🎟️ Pregunte por las tablas de bingo en los Bancos 1, 2 y 3',
+  '🪙 Cambie sus fichas en los Bancos 1, 2 y 3',
+  '🙏 Cada ficha ayuda a terminar nuestra parroquia',
+  '🛍️ Visite el Almacén: ¡hay de todo!',
+  '⛪ Juntos estamos construyendo la casa de Dios',
+  '📱 Escanee el código y siga el termómetro desde su celular',
+  '💛 Comparta el termómetro con su familia por WhatsApp',
+];
+
+/**
+ * "Repaso" cada 20 minutos: el termómetro baja y se vuelve a llenar hasta el
+ * valor REAL (nunca se inventa un porcentaje). Para probarlo: /pantalla?repaso=30
+ * lo hace cada 30 segundos.
+ */
+function useRepaso(pct: number) {
+  const [fase, setFase] = useState<'bajando' | 'subiendo' | null>(null);
+  // El intervalo no se reinicia cuando cambia el porcentaje (si no, nunca llegaría a los 20 min)
+  const pctRef = useRef(pct);
+  pctRef.current = pct;
+  useEffect(() => {
+    const seg = Number(new URLSearchParams(window.location.search).get('repaso'));
+    const cada = seg > 0 ? seg * 1000 : 20 * 60 * 1000;
+    const timers: number[] = [];
+    const id = window.setInterval(() => {
+      if (pctRef.current <= 0) return; // en 0 % no hay nada que repasar
+      setFase('bajando');
+      timers.push(window.setTimeout(() => setFase('subiendo'), 2400));
+      timers.push(window.setTimeout(() => setFase(null), 8000));
+    }, cada);
+    return () => {
+      window.clearInterval(id);
+      timers.forEach(window.clearTimeout);
+    };
+  }, []);
+  return fase;
+}
+
 /** Celular o pantalla vertical: la proyección 16:9 no sirve ahí, se muestra la versión móvil. */
 function useEsMovil() {
   const calc = () => window.innerWidth < 900 || window.innerHeight > window.innerWidth;
@@ -141,7 +179,10 @@ function Proyeccion() {
 
   const pct = progreso?.porcentaje ?? 0;
   const meta = progreso?.meta_alcanzada ?? false;
-  const animado = useAnimado(pct, 2200);
+  const repaso = useRepaso(pct);
+  // Durante el repaso solo el termómetro baja y vuelve a subir; el número grande se queda en el valor real
+  const animado = useAnimado(repaso === 'bajando' ? 0 : pct, 2200);
+  const numero = repaso ? pct : Math.round(animado);
   const celebrar = useCelebracion(progreso ? meta : undefined, 10_000);
   const { subida, hito } = useCambioPorcentaje(progreso?.porcentaje);
 
@@ -154,24 +195,25 @@ function Proyeccion() {
   const disponibles = (menu ?? []).filter((p) => !p.agotado && p.categoria !== 'otro');
   const premio = (b: { premio: number | null; premio_texto: string | null }) =>
     b.premio ? formatCOP(b.premio) : b.premio_texto ?? '';
-  const frases = [
-    '🎟️ Pregunte por las tablas de bingo en los Bancos 1, 2 y 3',
+  // Fijas: las que Felipe edita en Ajustes. En vivo: se arman solas con los datos.
+  const fijas = config?.frases?.length ? config.frases : FRASES_BASE;
+  const vivas = [
     meta ? '🎉 ¡Llegamos a la meta! Gracias, San Isidro' : `🌡️ ¡Ya vamos en el ${pct} %! Ayúdenos a llegar a la meta`,
-    '🪙 Cambie sus fichas en los Bancos 1, 2 y 3',
     proximoBingo && `🎱 Próximo: ${proximoBingo.nombre} con premio de ${premio(proximoBingo)}. ¡Pregunte por su tabla!`,
-    '🙏 Cada ficha ayuda a terminar nuestra parroquia',
     gran?.hora && gran.estado === 'programado' && `⭐ ${gran.nombre} a las ${formatHora(gran.hora)}: ¡${premio(gran)} de premio!`,
-    '🛍️ Visite el Almacén: ¡hay de todo!',
     disponibles.length > 0 &&
       (() => {
         // Un producto distinto en cada vuelta completa de frases
-        const p = disponibles[Math.floor(vuelta / 11) % disponibles.length];
+        const p = disponibles[Math.floor(vuelta / (fijas.length + 4)) % disponibles.length];
         return `😋 Hoy hay ${p.nombre.toLowerCase()}: ${formatCOP(p.precio)}`;
       })(),
-    '⛪ Juntos estamos construyendo la casa de Dios',
-    '📱 Escanee el código y siga el termómetro desde su celular',
-    '💛 Comparta el termómetro con su familia por WhatsApp',
   ].filter((f): f is string => Boolean(f));
+  // Intercaladas: fija, en vivo, fija, en vivo…
+  const frases: string[] = [];
+  for (let i = 0; i < Math.max(fijas.length, vivas.length); i++) {
+    if (fijas[i]) frases.push(fijas[i]);
+    if (vivas[i]) frases.push(vivas[i]);
+  }
   const frase = frases[vuelta % frases.length];
   const conteoFinal = falta !== null && falta > 0 && falta <= 60_000;
 
@@ -244,12 +286,18 @@ function Proyeccion() {
                     className={`tabular origin-left font-sans font-black leading-[0.85] tracking-tight text-crema drop-shadow-[0_6px_0_rgba(0,0,0,0.25)] ${
                       subida ? 'animar-pop' : ''
                     }`}
-                    style={{ fontSize: Math.round(animado) >= 100 ? 158 : 200 }}
+                    style={{ fontSize: numero >= 100 ? 158 : 200 }}
                   >
-                    {Math.round(animado)}
+                    {numero}
                     <span className="text-[0.55em] text-dorado-claro">%</span>
                   </div>
                   <div className="mt-3 text-[30px] font-bold uppercase tracking-[0.18em] text-dorado-claro">de la meta</div>
+                  {repaso && !meta && (
+                    <div className="animar-latido mt-6 rounded-2xl border-[3px] border-dorado-claro bg-marino/70 px-6 py-3 text-[40px] font-black leading-tight text-dorado-claro">
+                      🌡️ ¡Así vamos!
+                      <div className="text-[24px] font-bold text-crema">Cada ficha nos acerca a la meta</div>
+                    </div>
+                  )}
                   {meta && (
                     <div className="animar-entrar mt-6 max-w-[360px] font-serif text-[48px] font-bold leading-tight text-dorado-claro">
                       {config?.mensaje_meta ?? 'Gracias por todo su apoyo'}

@@ -98,6 +98,10 @@ export default function Bingos() {
           <li>
             Al pagarle el premio al ganador, un editor toca <b>💰 Premio entregado</b>. Así se descuenta del neto.
           </li>
+          <li>
+            Un bingo terminado queda como <b>✓ Jugado</b> y no se puede volver a jugar. Si necesitan otro, Felipe puede agregarlo
+            desde Ajustes.
+          </li>
         </ol>
         <p className="mt-2 text-xs text-marino/60">
           Solo puede haber un bingo en juego a la vez. Si el Gran Bingo se atrasa, use <b>Cambiar hora o premio</b> y la cuenta
@@ -139,14 +143,25 @@ export default function Bingos() {
           )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {b.estado !== 'en_juego' && (
+            {b.estado === 'programado' && (
               <button
                 type="button"
                 disabled={ocupado}
                 onClick={() => estado(b, 'en_juego', `${b.nombre} en juego`)}
                 className="h-12 rounded-xl bg-dorado font-extrabold text-marino disabled:opacity-50"
               >
-                {b.estado === 'finalizado' ? '▶ Jugar de nuevo' : '▶ Iniciar juego'}
+                ▶ Iniciar juego
+              </button>
+            )}
+            {/* Un bingo jugado no se puede volver a jugar */}
+            {b.estado === 'finalizado' && (
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="h-12 cursor-not-allowed rounded-xl bg-marino/10 font-extrabold text-marino/55"
+              >
+                ✓ Jugado
               </button>
             )}
             {b.estado === 'en_juego' && (
@@ -175,16 +190,6 @@ export default function Bingos() {
             >
               ✏️ Cambiar hora o premio
             </button>
-            {b.estado === 'finalizado' && !b.premio_entregado && (
-              <button
-                type="button"
-                disabled={ocupado}
-                onClick={() => estado(b, 'programado', `${b.nombre} vuelve a programado`)}
-                className="h-12 rounded-xl border-2 border-marino/15 bg-white text-sm font-bold"
-              >
-                ↩ Volver a “Por jugar”
-              </button>
-            )}
             {esEditor && (
               <button
                 type="button"

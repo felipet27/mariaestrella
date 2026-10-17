@@ -25,6 +25,7 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
    Las contraseñas se escriben **solo ahí**.
 5. **SQL Editor** → correr [supabase/perfiles.sql](supabase/perfiles.sql). Debe listar 4 perfiles.
 6. **SQL Editor** → correr [supabase/002_ajustes_felipe.sql](supabase/002_ajustes_felipe.sql) (sección ⚙️ Ajustes, solo para felipe). Debe listar 4 funciones.
+   Luego correr [supabase/003_frases_y_bingos.sql](supabase/003_frases_y_bingos.sql) (frases editables y bingos jugados no se repiten).
 7. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
    La `service_role` **nunca** se usa en este proyecto.
 

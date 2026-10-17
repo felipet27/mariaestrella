@@ -93,15 +93,18 @@ function Cifra({
 }) {
   return (
     <div
-      className={`rounded-2xl p-3 ${
+      className={`min-w-0 rounded-2xl p-3 ${
         destacado ? 'col-span-2 bg-marino text-crema' : 'border border-dorado/30 bg-white text-marino'
       }`}
     >
-      <div className={`text-xs font-bold uppercase tracking-wider ${destacado ? 'text-dorado-claro' : 'text-marino/60'}`}>
+      <div className={`text-[11px] font-bold uppercase tracking-wider ${destacado ? 'text-dorado-claro' : 'text-marino/60'}`}>
         {etiqueta}
       </div>
+      {/* El tamaño se ajusta al ancho de la pantalla para que las cifras grandes nunca se salgan */}
       <div
-        className={`tabular mt-0.5 font-black leading-tight ${destacado ? 'text-4xl' : 'text-2xl'} ${
+        className={`tabular mt-0.5 font-black leading-tight break-words ${
+          destacado ? 'text-[clamp(1.6rem,8.5vw,2.25rem)]' : 'text-[clamp(1rem,4.9vw,1.5rem)]'
+        } ${
           tono === 'verde' ? 'text-verde' : tono === 'rojo' ? 'text-rojo' : ''
         }`}
       >
@@ -204,7 +207,7 @@ export default function Inicio() {
               <li key={bn.banco_id} className={`py-2 ${alerta ? '-mx-2 rounded-xl bg-rojo/10 px-2' : ''}`}>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-bold">{bn.nombre}</span>
-                  <span className="tabular text-lg font-black">{formatCOP(bn.total)}</span>
+                  <span className="tabular shrink-0 text-base font-black sm:text-lg">{formatCOP(bn.total)}</span>
                 </div>
                 <div className="flex flex-wrap justify-between gap-x-3 text-xs text-marino/70">
                   <span>
@@ -227,7 +230,7 @@ export default function Inicio() {
             <li key={t} className="py-2">
               <div className="flex items-baseline justify-between">
                 <span className="font-bold">{t === 'donacion' ? 'Donaciones' : 'Remates'}</span>
-                <span className="tabular text-lg font-black">{formatCOP(sumaTipo(t))}</span>
+                <span className="tabular shrink-0 text-base font-black sm:text-lg">{formatCOP(sumaTipo(t))}</span>
               </div>
               <div className="text-xs text-marino/70">
                 {plural(porTipo(t).reduce((s, x) => s + Number(x.registros), 0), 'registro')}

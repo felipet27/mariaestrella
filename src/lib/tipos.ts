@@ -22,6 +22,8 @@ export interface ConfigPublica {
   instrucciones: string | null;
   horario: string | null;
   logo_url: string | null;
+  /** Frases fijas de la franja inferior (columna agregada en 003; puede no existir aún) */
+  frases?: string[] | null;
 }
 
 export type Categoria = 'comida' | 'bebida' | 'postre' | 'otro';
