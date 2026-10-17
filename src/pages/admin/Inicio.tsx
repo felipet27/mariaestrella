@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useInstalarApp } from '../../lib/instalar';
 import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { useAuth } from '../../lib/auth';
 import { Cargando } from '../../components/ProtectedRoute';
@@ -7,6 +9,74 @@ import { useAhora } from '../../lib/useProgreso';
 import { EVENTO_INICIO, formatCOP, formatHora, hace, MEDIOS, plural } from '../../lib/format';
 
 const UNA_HORA = 60 * 60 * 1000;
+
+/** Tarjeta para instalar el panel como app en el celular o el PC. */
+function InstalarApp() {
+  const { instalada, puede, instalar, ios } = useInstalarApp();
+  const [ver, setVer] = useState(false);
+  if (instalada) return null;
+
+  return (
+    <section className="rounded-2xl border-2 border-dashed border-real/30 bg-white/70 p-4">
+      <div className="flex items-center gap-3">
+        <img src="/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl shadow" />
+        <div className="min-w-0 flex-1">
+          <div className="font-bold text-marino">📲 Instalar la app en este celular</div>
+          <div className="text-xs text-marino/65">Queda con el logo en su pantalla de inicio y abre directo el panel.</div>
+        </div>
+      </div>
+      {puede ? (
+        <button
+          type="button"
+          onClick={instalar}
+          className="mt-3 h-12 w-full rounded-xl bg-real text-base font-extrabold text-crema shadow"
+        >
+          Instalar app
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setVer(!ver)}
+            aria-expanded={ver}
+            className="mt-3 h-11 w-full rounded-xl border-2 border-real/30 text-sm font-bold text-real"
+          >
+            {ver ? 'Ocultar pasos ▲' : '¿Cómo la instalo? ▼'}
+          </button>
+          {ver && (
+            <ol className="animar-entrar mt-3 list-decimal space-y-1.5 pl-5 text-sm text-marino/85">
+              {ios ? (
+                <>
+                  <li>
+                    Abra esta página en <b>Safari</b>.
+                  </li>
+                  <li>
+                    Toque el botón <b>Compartir</b> (el cuadrito con la flecha hacia arriba ⬆️).
+                  </li>
+                  <li>
+                    Elija <b>“Agregar a inicio”</b> y luego <b>Agregar</b>.
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    Abra esta página en <b>Chrome</b> (o Edge en el PC).
+                  </li>
+                  <li>
+                    Toque el menú <b>⋮</b> (arriba a la derecha).
+                  </li>
+                  <li>
+                    Elija <b>“Instalar app”</b> o <b>“Agregar a pantalla de inicio”</b>.
+                  </li>
+                </>
+              )}
+            </ol>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
 
 function Cifra({
   etiqueta,
@@ -186,7 +256,9 @@ export default function Inicio() {
                   <span className="font-bold text-rojo">premio sin pagar</span>
                 ) : x.estado === 'en_juego' ? (
                   'en juego'
-                ): ('por jugar')}
+                ) : (
+                  'por jugar'
+                )}
               </span>
             </li>
           ))}
@@ -198,6 +270,8 @@ export default function Inicio() {
           </p>
         )}
       </Tarjeta>
+
+      <InstalarApp />
     </div>
   );
 }

@@ -13,7 +13,7 @@ import Historial from './pages/admin/Historial';
 import Productos from './pages/admin/Productos';
 import Bingos from './pages/admin/Bingos';
 import Reportes from './pages/admin/Reportes';
-import Pruebas from './pages/admin/Pruebas';
+import Ajustes from './pages/admin/Ajustes';
 
 function SinConfigurar() {
   return (
@@ -64,7 +64,8 @@ export default function App() {
             <Route path="productos" element={<Productos />} />
             <Route path="bingos" element={<Bingos />} />
             <Route path="reportes" element={<Reportes />} />
-            <Route path="pruebas" element={<Pruebas />} />
+            <Route path="ajustes" element={<Ajustes />} />
+            <Route path="pruebas" element={<Navigate to="/admin/ajustes" replace />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

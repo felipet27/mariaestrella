@@ -22,7 +22,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { to: '/admin/productos', icono: '🍽️', label: 'Productos' },
     { to: '/admin/bingos', icono: '🎱', label: 'Bingos' },
     { to: '/admin/reportes', icono: '📊', label: 'Reportes' },
-    ...(perfil?.usuario === 'felipe' ? [{ to: '/admin/pruebas', icono: '🧪', label: 'Pruebas' }] : []),
+    ...(perfil?.usuario === 'felipe' ? [{ to: '/admin/ajustes', icono: '⚙️', label: 'Ajustes' }] : []),
   ];
 
   return (

@@ -148,11 +148,41 @@ export function describirAuditoria(a: Auditoria, ctx: Contexto): EventoAuditoria
       }
       return null;
 
-    case 'perfiles':
+    case 'perfiles': {
       if (a.accion === 'INSERT') {
         return { ...base, icono: '👤', categoria: 'sistema', texto: `se creó el usuario ${txt(despues.nombre)}` };
       }
-      return null;
+      const partes: string[] = [];
+      if (cambio('rol')) partes.push(`cambió a ${txt(despues.nombre)} a ${despues.rol === 'editor' ? 'editor' : 'registrador'}`);
+      if (cambio('activo')) partes.push(despues.activo ? `le devolvió el acceso a ${txt(despues.nombre)}` : `le quitó el acceso a ${txt(despues.nombre)}`);
+      if (!partes.length) return null;
+      return { ...base, icono: '👤', categoria: 'sistema', texto: partes.join(' y '), importante: true };
+    }
+
+    case 'bancos': {
+      if (a.accion === 'INSERT') {
+        return { ...base, icono: '🏦', categoria: 'sistema', texto: `agregó el punto de recaudo “${txt(despues.nombre)}”` };
+      }
+      const partes: string[] = [];
+      if (cambio('nombre')) partes.push(`cambió el nombre del punto “${txt(antes.nombre)}” por “${txt(despues.nombre)}”`);
+      if (cambio('activo')) partes.push(despues.activo ? `activó el punto “${txt(despues.nombre)}”` : `desactivó el punto “${txt(despues.nombre)}”`);
+      if (!partes.length) return null;
+      return { ...base, icono: '🏦', categoria: 'sistema', texto: partes.join(' y ') };
+    }
+
+    case 'config_publica': {
+      const nombres: Record<string, string> = {
+        titulo: 'el título',
+        subtitulo: 'el subtítulo',
+        causa: 'la causa',
+        mensaje_meta: 'el mensaje de la meta',
+        instrucciones: 'las instrucciones',
+        horario: 'el horario',
+      };
+      const cambiados = Object.keys(nombres).filter(cambio).map((k) => nombres[k]);
+      if (!cambiados.length) return null;
+      return { ...base, icono: '📝', categoria: 'sistema', texto: `cambió ${cambiados.join(', ')} de la pantalla` };
+    }
 
     default:
       return null;

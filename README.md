@@ -13,7 +13,7 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
 | `/admin/productos` | Admins | Productos nuevos, precios, AGOTADO |
 | `/admin/bingos` | Admins | Iniciar y finalizar bingos; premio entregado (solo editores) |
 | `/admin/reportes` | Admins | Balance, totales, gráfico por hora, auditoría y CSV |
-| `/admin/pruebas` | **Solo felipe** | Meta temporal y reinicio de todos los datos |
+| `/admin/ajustes` | **Solo felipe** | Textos, meta, puntos, usuarios, bingos extra y reinicio |
 
 ## 1. Supabase
 
@@ -24,7 +24,8 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
    `angela@sanisidro.com`, `johana@sanisidro.com`, `felipe@sanisidro.com`, `invitado@sanisidro.com`.
    Las contraseñas se escriben **solo ahí**.
 5. **SQL Editor** → correr [supabase/perfiles.sql](supabase/perfiles.sql). Debe listar 4 perfiles.
-6. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
+6. **SQL Editor** → correr [supabase/002_ajustes_felipe.sql](supabase/002_ajustes_felipe.sql) (sección ⚙️ Ajustes, solo para felipe). Debe listar 4 funciones.
+7. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
    La `service_role` **nunca** se usa en este proyecto.
 
 ## 2. Local
