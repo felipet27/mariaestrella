@@ -95,36 +95,147 @@ function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void
   );
 }
 
-/** Selector de producto agrupado por categoría (usa el selector nativo del celular). */
+/** Quita tildes y mayúsculas: "Chicharrón" → "chicharron". */
+const normalizar = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+interface OpcionItem {
+  valor: string;
+  etiqueta: string;
+  grupo: string;
+  /** Texto extra para la búsqueda (sinónimos) */
+  claves: string;
+}
+
+/**
+ * Buscador de producto: se escribe parte del nombre ("tam", "chicharron") y se toca
+ * el resultado. Enter elige el primero. Funciona sin tildes.
+ */
 function SelectorItem({ valor, onChange, productos }: { valor: Item | null; onChange: (i: Item | null) => void; productos: Producto[] }) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [marcado, setMarcado] = useState(0);
+
+  const opciones: OpcionItem[] = [
+    { valor: 'tablas_bingo', etiqueta: '🎟️ Tablas de bingo', grupo: 'Especiales', claves: 'tablas bingo carton' },
+    { valor: 'general', etiqueta: '📦 General (sin detalle)', grupo: 'Especiales', claves: 'general sin detalle almacen varios otro' },
+    ...(Object.keys(CATEGORIAS) as Categoria[]).flatMap((cat) =>
+      productos
+        .filter((p) => p.categoria === cat)
+        .map((p) => ({
+          valor: `p:${p.id}`,
+          etiqueta: `${p.emoji ? `${p.emoji} ` : ''}${p.nombre}`,
+          grupo: CATEGORIAS[cat],
+          claves: `${p.nombre} ${CATEGORIAS[cat]}`,
+        })),
+    ),
+  ];
+
+  const q = normalizar(texto);
+  // Cada palabra escrita debe aparecer (en cualquier orden): "arepa chori" encuentra "Chorizo con arepa"
+  const filtradas = q
+    ? opciones.filter((o) => q.split(/\s+/).every((palabra) => normalizar(`${o.etiqueta} ${o.claves}`).includes(palabra)))
+    : opciones;
+
+  const elegir = (o: OpcionItem) => {
+    onChange(itemDesdeValor(o.valor));
+    setTexto('');
+    setAbierto(false);
+  };
+
+  const actual = opciones.find((o) => o.valor === valorItem(valor));
+
   return (
-    <select
-      value={valorItem(valor)}
-      onChange={(e) => onChange(itemDesdeValor(e.target.value))}
-      className={`h-12 w-full min-w-0 rounded-xl border-2 bg-white px-2 text-base font-semibold outline-none focus:border-dorado ${
-        valor ? 'border-dorado/50 text-marino' : 'border-rojo/40 text-marino/50'
-      }`}
-    >
-      <option value="">Elija qué vendió…</option>
-      <optgroup label="Especiales">
-        <option value="tablas_bingo">🎟️ Tablas de bingo</option>
-        <option value="general">📦 General (sin detalle)</option>
-      </optgroup>
-      {(Object.keys(CATEGORIAS) as Categoria[]).map((cat) => {
-        const items = productos.filter((p) => p.categoria === cat);
-        if (!items.length) return null;
-        return (
-          <optgroup key={cat} label={CATEGORIAS[cat]}>
-            {items.map((p) => (
-              <option key={p.id} value={`p:${p.id}`}>
-                {p.emoji ? `${p.emoji} ` : ''}
-                {p.nombre}
-              </option>
-            ))}
-          </optgroup>
-        );
-      })}
-    </select>
+    <div className="relative">
+      <div
+        className={`flex h-12 items-center rounded-xl border-2 bg-white px-3 focus-within:border-dorado ${
+          valor || abierto ? 'border-dorado/50' : 'border-rojo/40'
+        }`}
+      >
+        <span className="mr-2 text-marino/40" aria-hidden="true">
+          🔍
+        </span>
+        <input
+          type="text"
+          value={abierto ? texto : actual?.etiqueta ?? ''}
+          placeholder={abierto && actual ? actual.etiqueta : 'Escriba o elija qué vendió…'}
+          onFocus={() => {
+            setAbierto(true);
+            setTexto('');
+            setMarcado(0);
+          }}
+          onBlur={() => setTimeout(() => setAbierto(false), 150)}
+          onChange={(e) => {
+            setTexto(e.target.value);
+            setMarcado(0);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setMarcado((m) => Math.min(m + 1, filtradas.length - 1));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setMarcado((m) => Math.max(m - 1, 0));
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              if (filtradas[marcado]) {
+                elegir(filtradas[marcado]);
+                (e.target as HTMLInputElement).blur();
+              }
+            } else if (e.key === 'Escape') {
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          autoComplete="off"
+          enterKeyHint="done"
+          aria-label="Producto"
+          className={`h-full w-full min-w-0 bg-transparent text-base font-semibold outline-none placeholder:font-medium ${
+            abierto ? 'placeholder:text-marino/40' : 'placeholder:text-marino/50'
+          } text-marino`}
+        />
+        {valor && !abierto && <span className="ml-1 shrink-0 text-xs font-bold text-real">Cambiar</span>}
+      </div>
+
+      {abierto && (
+        <ul
+          role="listbox"
+          // mousedown evita que el campo pierda el foco antes de elegir
+          onMouseDown={(e) => e.preventDefault()}
+          className="animar-entrar absolute inset-x-0 top-[calc(100%+4px)] z-30 max-h-72 overflow-y-auto rounded-xl border-2 border-dorado/40 bg-white py-1 shadow-xl"
+        >
+          {filtradas.length === 0 && (
+            <li className="px-3 py-3 text-sm text-marino/60">
+              No hay un producto con “{texto}”. Use <b>📦 General</b> o agréguelo en Productos.
+            </li>
+          )}
+          {filtradas.map((o, i) => {
+            const nuevoGrupo = i === 0 || filtradas[i - 1].grupo !== o.grupo;
+            return (
+              <li key={o.valor}>
+                {nuevoGrupo && (
+                  <div className="px-3 pb-0.5 pt-2 text-[10px] font-extrabold uppercase tracking-wider text-real/60">{o.grupo}</div>
+                )}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === marcado}
+                  onClick={() => elegir(o)}
+                  className={`flex min-h-11 w-full items-center px-3 text-left text-base ${
+                    i === marcado ? 'bg-dorado/20 font-bold' : 'active:bg-dorado/10'
+                  }`}
+                >
+                  {o.etiqueta}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -391,7 +502,8 @@ export default function Registrar() {
                     ✕ Quitar
                   </button>
                 </div>
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-2">
+                {/* Producto en su propia fila (espacio para escribir) y el monto debajo */}
+                <div className="space-y-2">
                   <SelectorItem valor={l.item} onChange={(item) => cambiarLinea(i, { item })} productos={productos} />
                   <MontoLinea valor={l.monto} onChange={(monto) => cambiarLinea(i, { monto })} />
                 </div>
