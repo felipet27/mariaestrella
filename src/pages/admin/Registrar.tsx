@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Ayuda, Opcion, Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Opcion, Tarjeta } from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import { useBancos } from '../../lib/useAdmin';
 import { mensajeError } from '../../lib/supabase';
@@ -19,7 +19,7 @@ const SUB_TIPO: Record<TipoIngreso, string> = {
 
 const SUB_MEDIO: Record<MedioPago, string> = {
   efectivo: 'Billetes y monedas',
-  transferencia: 'Solo si ya verificó el pago por WhatsApp',
+  transferencia: 'Solo si ya verificó el pago',
 };
 
 const LIMITE_DOBLE = 5_000_000;
@@ -225,10 +225,22 @@ export default function Registrar() {
         </p>
       )}
 
-      <Ayuda>
-        Use esta pantalla cada vez que <b>recoja dinero</b> de un banco o del Almacén, o reciba una donación o un remate. Antes de
-        guardar le mostramos el monto en grande para que lo confirme.
-      </Ayuda>
+      <GuiaRapida titulo="¿Cómo registro un ingreso?">
+        <ol className="list-decimal space-y-1.5 pl-5">
+          <li>
+            Use esta pantalla cada vez que <b>recoja dinero</b> de un banco o del Almacén, o reciba una <b>donación</b> o un{' '}
+            <b>remate</b>.
+          </li>
+          <li>Elija qué es, de qué punto viene (si es de un banco), cuánto es y cómo se pagó.</li>
+          <li>
+            Toque <b>Registrar</b>. Le mostramos el monto en grande y en letras para que revise los ceros antes de confirmar.
+          </li>
+          <li>Al guardar, el termómetro de la pantalla sube solo y el formulario queda limpio para el siguiente.</li>
+        </ol>
+        <p className="mt-2 text-xs text-marino/60">
+          Si no hay señal, el registro queda guardado en el celular y se envía solo cuando vuelva la conexión.
+        </p>
+      </GuiaRapida>
 
       <Tarjeta titulo="1. ¿Qué va a registrar?">
         <div className="grid grid-cols-3 gap-2">
@@ -310,7 +322,7 @@ export default function Registrar() {
         type="button"
         disabled={faltantes.length > 0 || guardando}
         onClick={() => setPaso(1)}
-        className="sticky bottom-3 h-16 w-full rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-lg disabled:bg-marino/15 disabled:text-marino/50"
+        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] h-16 w-full md:bottom-3 rounded-2xl bg-dorado text-xl font-extrabold text-marino shadow-lg disabled:bg-marino/15 disabled:text-marino/50"
       >
         {faltantes.length ? `Falta ${faltantes.join(', ')}` : `Registrar ${formatCOP(monto)}`}
       </button>

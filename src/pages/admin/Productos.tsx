@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import MontoInput from '../../components/MontoInput';
-import { Ayuda, Opcion } from '../../components/AdminLayout';
+import { GuiaRapida, Opcion } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useLiveQuery } from '../../lib/useLiveQuery';
@@ -91,11 +91,12 @@ export default function Productos() {
           + Nuevo producto
         </button>
       </div>
-      <Ayuda>
-        Esta es la lista de precios que se ve en la <b>pantalla grande</b> y en los celulares. Todo cambio aparece en segundos.
-      </Ayuda>
-      <ul className="space-y-1 rounded-2xl border border-dorado/30 bg-white px-4 py-3 text-sm text-marino/85">
-        <li>
+      <GuiaRapida titulo="¿Cómo manejo los productos?">
+        <p className="mb-2">
+          Esta es la lista de precios que se ve en la <b>pantalla grande</b> y en los celulares. Todo cambio aparece en segundos.
+        </p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
           <b className="text-rojo">✕ Agotado</b>: el producto se ve tachado en la pantalla. Cuando vuelva a haber, toque{' '}
           <b className="text-verde">✓ Disponible</b>.
         </li>
@@ -103,9 +104,13 @@ export default function Productos() {
           <b>Toque el nombre</b> de un producto para cambiar su precio o su nombre.
         </li>
         <li>
-          <b>+ Nuevo producto</b>: para agregar algo que no está en la lista (por ejemplo, un postre nuevo).
-        </li>
-      </ul>
+            <b>+ Nuevo producto</b>: para agregar algo que no está en la lista (por ejemplo, un postre nuevo).
+          </li>
+          <li>
+            <b>Ocultar</b> (dentro de editar) es solo para productos creados por error. Si se acabó, use <b>Agotado</b>.
+          </li>
+        </ul>
+      </GuiaRapida>
 
       {(Object.keys(CATEGORIAS) as Categoria[]).map((cat) => {
         const items = activos.filter((p) => p.categoria === cat);

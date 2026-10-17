@@ -79,6 +79,9 @@ export function duracion(ms: number): string {
   return `${h} h ${m} min`;
 }
 
+/** plural(1, 'registro') → "1 registro"; plural(3, 'recogida') → "3 recogidas" */
+export const plural = (n: number, palabra: string) => `${n} ${palabra}${Number(n) === 1 ? '' : 's'}`;
+
 /** "hace 1 h 20 min" */
 export const hace = (iso: string | Date, ahora = Date.now()) =>
   `hace ${duracion(ahora - new Date(iso).getTime())}`;

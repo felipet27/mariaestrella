@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Ayuda, GuiaRapida, Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { useAuth } from '../../lib/auth';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useBingosAdmin, useTablero } from '../../lib/useAdmin';
 import { useAhora } from '../../lib/useProgreso';
-import { EVENTO_INICIO, formatCOP, formatHora, hace, MEDIOS } from '../../lib/format';
+import { EVENTO_INICIO, formatCOP, formatHora, hace, MEDIOS, plural } from '../../lib/format';
 
 const UNA_HORA = 60 * 60 * 1000;
 
@@ -69,7 +69,7 @@ export default function Inicio() {
         </span>
       </div>
 
-      <GuiaRapida id="inicio" titulo="¿Cómo uso el panel? (guía rápida)">
+      <GuiaRapida titulo="¿Cómo uso el panel? (guía rápida)">
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
             Cuando recoja dinero de un <b>banco</b> o del <b>Almacén</b>, o reciba una <b>donación</b> o un <b>remate</b>: toque{' '}
@@ -86,6 +86,10 @@ export default function Inicio() {
             {!esEditor && ' (Pídaselo a Angela, Johana o Felipe: solo ellos pueden corregir.)'}
           </li>
           <li>Sin señal no pasa nada: el registro se guarda en el celular y se envía solo cuando vuelva.</li>
+          <li>
+            En <b>Por punto de recaudo</b>, si un banco aparece en <b className="text-rojo">rojo</b> es porque lleva más de 1 hora
+            sin que nadie recoja el dinero: vaya a recogerlo y regístrelo.
+          </li>
         </ol>
         <p className="mt-2 text-xs text-marino/60">El público nunca ve montos, solo el porcentaje del termómetro.</p>
       </GuiaRapida>
@@ -122,10 +126,6 @@ export default function Inicio() {
       )}
 
       <Tarjeta titulo="Por punto de recaudo">
-        <Ayuda className="mb-2">
-          Cuánto se ha recogido de cada banco. Si un punto aparece en <b className="text-rojo">rojo</b>, lleva más de 1 hora sin
-          que nadie recoja el dinero: vaya a recogerlo y regístrelo.
-        </Ayuda>
         <ul className="divide-y divide-marino/10">
           {data.bancos.map((bn) => {
             const ref = bn.ultima_recogida ? new Date(bn.ultima_recogida).getTime() : EVENTO_INICIO.getTime();
@@ -141,7 +141,7 @@ export default function Inicio() {
                     {MEDIOS.efectivo} {formatCOP(bn.efectivo)} · {MEDIOS.transferencia} {formatCOP(bn.transferencia)}
                   </span>
                   <span className={alerta ? 'font-bold text-rojo' : ''}>
-                    {bn.recogidas} recogida{bn.recogidas === 1 ? '' : 's'}
+                    {plural(bn.recogidas, 'recogida')}
                     {bn.ultima_recogida
                       ? ` · última ${hace(bn.ultima_recogida, ahora)}`
                       : alerta
@@ -160,7 +160,7 @@ export default function Inicio() {
                 <span className="tabular text-lg font-black">{formatCOP(sumaTipo(t))}</span>
               </div>
               <div className="text-xs text-marino/70">
-                {porTipo(t).reduce((s, x) => s + Number(x.registros), 0)} registros
+                {plural(porTipo(t).reduce((s, x) => s + Number(x.registros), 0), 'registro')}
                 {porTipo(t).map((x) => ` · ${MEDIOS[x.medio_pago]} ${formatCOP(x.total)}`).join('')}
               </div>
             </li>
@@ -181,14 +181,12 @@ export default function Inicio() {
               <span className="tabular">
                 {formatCOP(x.premio)} ·{' '}
                 {x.premio_entregado ? (
-                  <span className="font-semibold text-verde">entregado</span>
+                  <span className="font-semibold text-verde">premio pagado</span>
                 ) : x.estado === 'finalizado' ? (
-                  <span className="font-bold text-rojo">premio pendiente</span>
+                  <span className="font-bold text-rojo">premio sin pagar</span>
                 ) : x.estado === 'en_juego' ? (
                   'en juego'
-                ) : (
-                  'programado'
-                )}
+                ): ('por jugar')}
               </span>
             </li>
           ))}

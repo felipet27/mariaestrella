@@ -87,7 +87,7 @@ export default function Bingos() {
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold text-marino">Bingos</h1>
-      <GuiaRapida id="bingos" titulo="¿Cómo se maneja un bingo?">
+      <GuiaRapida titulo="¿Cómo se maneja un bingo?">
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
             Cuando vaya a empezar, toque <b>▶ Iniciar juego</b>. En la pantalla grande aparece “¡BINGO EN JUEGO!” con el premio.

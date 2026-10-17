@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Ayuda } from '../../components/AdminLayout';
+import { GuiaRapida } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
@@ -84,17 +84,26 @@ export default function Historial() {
   return (
     <div className="space-y-3">
       <h1 className="font-serif text-3xl font-bold text-marino">Historial</h1>
-      <Ayuda>
-        Aquí está todo lo que se ha registrado hoy, lo más reciente arriba. Nada se borra: si algo quedó mal,{' '}
+      <GuiaRapida titulo="¿Cómo corrijo un error?">
+        <p>Aquí está todo lo que se ha registrado hoy, lo más reciente arriba. Nada se borra: queda el rastro de todo.</p>
         {esEditor ? (
-          <>
-            use <b>Corregir</b> (anula el registro y abre el formulario con los mismos datos para arreglarlos) o <b>Anular</b> (si
-            no debía registrarse). Siempre se pide el motivo.
-          </>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+            <li>
+              <b>✏️ Corregir</b>: si el monto o un dato quedó mal. Anula el registro y abre el formulario con los mismos datos para
+              que los arregle y guarde de nuevo.
+            </li>
+            <li>
+              <b>✕ Anular</b>: si el registro no debía existir (por ejemplo, se registró dos veces).
+            </li>
+            <li>Siempre se pide el motivo, y el termómetro se ajusta solo.</li>
+          </ul>
         ) : (
-          <>avísele a Angela, Johana o Felipe: solo ellos pueden anular o corregir.</>
+          <p className="mt-2">
+            Si algo quedó mal, avísele a <b>Angela, Johana o Felipe</b>: solo ellos pueden anular o corregir registros.
+          </p>
         )}
-      </Ayuda>
+        <p className="mt-2 text-xs text-marino/60">Use los filtros para buscar por tipo, punto, persona o medio de pago.</p>
+      </GuiaRapida>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <select value={fTipo} onChange={(e) => setFTipo(e.target.value)} className={sel}>

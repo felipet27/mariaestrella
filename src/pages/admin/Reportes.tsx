@@ -1,31 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Ayuda, Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
+import { useToast } from '../../components/Toast';
 import { useBancos, useBingosAdmin, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
 import { useLiveQuery } from '../../lib/useLiveQuery';
-import { q, supabase } from '../../lib/supabase';
-import { formatCOP, formatFechaHora, formatHora, horaBogota, MEDIOS, TIPOS } from '../../lib/format';
+import { mensajeError, q, supabase } from '../../lib/supabase';
+import { formatCOP, formatHora, horaBogota, plural, TIPOS } from '../../lib/format';
+import { CATEGORIAS_AUDITORIA, describirAuditoria, type CategoriaAuditoria, type EventoAuditoria } from '../../lib/auditoria';
+import { descargarReporteExcel } from '../../lib/excel';
 import type { Auditoria, Balance, Ingreso } from '../../lib/tipos';
 
 interface Datos {
   ingresos: Ingreso[];
   auditoria: Auditoria[];
   balance: Balance | null;
-}
-
-function descargarCSV(nombre: string, filas: (string | number | null | undefined)[][]) {
-  // Separador ";" y BOM para que Excel en español lo abra bien
-  const esc = (v: string | number | null | undefined) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = '﻿' + filas.map((f) => f.map(esc).join(';')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nombre;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function Fila({ etiqueta, valor, sub }: { etiqueta: string; valor: string; sub?: string }) {
@@ -94,36 +82,72 @@ function GraficoHoras({ ingresos }: { ingresos: Ingreso[] }) {
   );
 }
 
-function resumenCambio(a: Auditoria) {
-  if (a.tabla === 'sistema') return a.accion;
-  const antes = a.antes ?? {};
-  const despues = a.despues ?? {};
-  if (a.accion === 'INSERT') {
-    if (a.tabla === 'ingresos') return `Nuevo ingreso ${formatCOP(Number(despues.monto))}`;
-    return `Nuevo: ${String(despues.nombre ?? despues.usuario ?? a.registro_id)}`;
-  }
-  const ignorar = new Set(['actualizado_en', 'anulada_en', 'premio_entregado_en', 'anulada_por', 'premio_entregado_por']);
-  const cambios = Object.keys(despues)
-    .filter((k) => !ignorar.has(k) && JSON.stringify(antes[k]) !== JSON.stringify(despues[k]))
-    .map((k) => {
-      const fmt = (v: unknown) =>
-        ['monto', 'precio', 'premio', 'meta'].includes(k) && v !== null ? formatCOP(Number(v)) : String(v ?? '—');
-      return `${k}: ${fmt(antes[k])} → ${fmt(despues[k])}`;
-    });
-  const quien = despues.nombre ? `${String(despues.nombre)} · ` : '';
-  return quien + (cambios.join(' · ') || a.accion);
+/** Actividad del día en frases sencillas, con filtro por sección. */
+function Actividad({ eventos }: { eventos: EventoAuditoria[] }) {
+  const [filtro, setFiltro] = useState<CategoriaAuditoria | 'todo'>('todo');
+  const [cuantos, setCuantos] = useState(30);
+  const lista = eventos.filter((e) => filtro === 'todo' || e.categoria === filtro);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {(['todo', 'dinero', 'productos', 'bingos', 'sistema'] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => {
+              setFiltro(c);
+              setCuantos(30);
+            }}
+            className={`h-9 rounded-full px-3 text-sm font-bold ${filtro === c ? 'bg-real text-crema' : 'bg-marino/5 text-marino/70'}`}
+          >
+            {c === 'todo' ? 'Todo' : CATEGORIAS_AUDITORIA[c]}
+          </button>
+        ))}
+      </div>
+
+      {lista.length === 0 && <p className="text-sm text-marino/60">No hay actividad en esta sección todavía.</p>}
+
+      <ol className="relative space-y-3 border-l-2 border-dorado/30 pl-4">
+        {lista.slice(0, cuantos).map((e) => (
+          <li key={e.id} className="relative">
+            <span className="absolute -left-[25px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-crema text-[10px] ring-2 ring-dorado/40">
+              {e.icono}
+            </span>
+            <div className="text-xs font-semibold text-marino/50">{formatHora(e.fecha)}</div>
+            <div className={`text-sm leading-snug ${e.importante ? 'font-semibold' : ''}`}>
+              <b>{e.quien}</b> {e.texto}
+            </div>
+            {e.detalle && <div className="text-xs italic text-marino/60">{e.detalle}</div>}
+          </li>
+        ))}
+      </ol>
+
+      {lista.length > cuantos && (
+        <button
+          type="button"
+          onClick={() => setCuantos((n) => n + 50)}
+          className="mt-3 h-11 w-full rounded-xl border-2 border-marino/15 text-sm font-bold text-real"
+        >
+          Ver más ({lista.length - cuantos} restantes)
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function Reportes() {
+  const toast = useToast();
   const { data: perfiles } = usePerfiles();
   const { data: bancos } = useBancos();
   const { data: bingos } = useBingosAdmin();
+  const [descargando, setDescargando] = useState(false);
   const { data, error } = useLiveQuery<Datos>(
     ['ingresos', 'bingos', 'productos'],
     async () => {
       const [ingresos, auditoria, balance] = await Promise.all([
         q<Ingreso[]>(supabase.from('ingresos').select('*').order('registrado_en')),
-        q<Auditoria[]>(supabase.from('auditoria').select('*').order('fecha', { ascending: false }).limit(2000)),
+        q<Auditoria[]>(supabase.from('auditoria').select('*').order('fecha', { ascending: false }).limit(3000)),
         q<Balance | null>(supabase.from('v_balance').select('*').maybeSingle()),
       ]);
       return { ingresos, auditoria, balance };
@@ -131,79 +155,86 @@ export default function Reportes() {
     { intervalo: 30_000 },
   );
 
+  const eventos = useMemo(
+    () =>
+      (data?.auditoria ?? [])
+        .map((a) =>
+          describirAuditoria(a, {
+            nombreUsuario: (id) => nombrePerfil(perfiles, id),
+            nombreBanco: (id) => bancos?.find((b) => b.id === id)?.nombre ?? 'banco',
+          }),
+        )
+        .filter((e): e is EventoAuditoria => e !== null),
+    [data?.auditoria, perfiles, bancos],
+  );
+
   if (!data) return error ? <p className="font-semibold text-rojo">{error}</p> : <Cargando />;
 
   const validos = data.ingresos.filter((i) => !i.anulada);
   const suma = (xs: Ingreso[]) => xs.reduce((s, i) => s + Number(i.monto), 0);
-  const nombreBanco = (id: number | null) => bancos?.find((b) => b.id === id)?.nombre ?? '';
   const b = data.balance;
 
-  const exportarIngresos = () =>
-    descargarCSV('ingresos-san-isidro.csv', [
-      ['id', 'fecha_hora', 'tipo', 'punto', 'medio', 'monto', 'nota', 'registrado_por', 'anulada', 'anulada_por', 'anulada_en', 'motivo'],
-      ...data.ingresos.map((i) => [
-        i.id,
-        formatFechaHora(i.registrado_en),
-        TIPOS[i.tipo],
-        nombreBanco(i.banco_id),
-        MEDIOS[i.medio_pago],
-        i.monto,
-        i.nota,
-        nombrePerfil(perfiles, i.registrado_por),
-        i.anulada ? 'sí' : 'no',
-        i.anulada ? nombrePerfil(perfiles, i.anulada_por) : '',
-        formatFechaHora(i.anulada_en),
-        i.motivo_anulacion,
-      ]),
-    ]);
-
-  const exportarAuditoria = () =>
-    descargarCSV('auditoria-san-isidro.csv', [
-      ['id', 'fecha_hora', 'tabla', 'registro', 'accion', 'usuario', 'resumen', 'antes', 'despues'],
-      ...data.auditoria.map((a) => [
-        a.id,
-        formatFechaHora(a.fecha),
-        a.tabla,
-        a.registro_id,
-        a.accion,
-        a.usuario ? nombrePerfil(perfiles, a.usuario) : 'sistema',
-        resumenCambio(a),
-        a.antes ? JSON.stringify(a.antes) : '',
-        a.despues ? JSON.stringify(a.despues) : '',
-      ]),
-    ]);
+  const descargar = async () => {
+    setDescargando(true);
+    try {
+      await descargarReporteExcel({
+        ingresos: data.ingresos,
+        balance: b,
+        bancos: bancos ?? [],
+        perfiles: perfiles ?? [],
+        bingos: bingos ?? [],
+        eventos,
+      });
+      toast('✓ Reporte descargado');
+    } catch (e) {
+      toast(`No se pudo generar el Excel: ${mensajeError(e)}`, 'error');
+    } finally {
+      setDescargando(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold text-marino">Reportes</h1>
-      <Ayuda>
-        Resumen para el cierre del día. Al final del evento descargue los dos archivos CSV: se abren en Excel y sirven de respaldo
-        (todos los registros y quién hizo cada cambio).
-      </Ayuda>
+      <GuiaRapida titulo="¿Para qué sirve esta sección?">
+        <p>
+          Es el resumen para el <b>cierre del día</b>: cuánto entró, por dónde, quién lo registró y todo lo que se hizo en el
+          sistema.
+        </p>
+        <p className="mt-1.5">
+          Al final del evento toque <b>Descargar reporte en Excel</b>. El archivo trae varias hojas: Resumen, Ingresos, Por hora,
+          Bingos y Actividad. Sirve de respaldo y para entregar las cuentas.
+        </p>
+      </GuiaRapida>
 
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={exportarIngresos} className="h-12 rounded-xl bg-real font-bold text-crema">
-          ⬇ CSV ingresos
-        </button>
-        <button type="button" onClick={exportarAuditoria} className="h-12 rounded-xl bg-real font-bold text-crema">
-          ⬇ CSV auditoría
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={descargar}
+        disabled={descargando}
+        className="flex h-16 w-full flex-col items-center justify-center rounded-2xl bg-verde text-lg font-extrabold text-white shadow-md disabled:opacity-60"
+      >
+        {descargando ? 'Generando…' : '⬇ Descargar reporte en Excel'}
+        <span className="text-xs font-semibold text-white/80">Resumen, ingresos, por hora, bingos y actividad</span>
+      </button>
 
       {b && (
-        <Tarjeta titulo="Balance final">
-          <Fila etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} />
-          <Fila etiqueta="Premios entregados" valor={`− ${formatCOP(b.premios_entregados)}`} />
+        <Tarjeta titulo="Balance">
+          <Fila etiqueta="Recaudo bruto" sub="todo lo que entró" valor={formatCOP(b.bruto)} />
+          <Fila etiqueta="Premios de bingo pagados" valor={`− ${formatCOP(b.premios_entregados)}`} />
           {(bingos ?? [])
             .filter((x) => x.premio_entregado)
             .map((x) => (
               <div key={x.id} className="pl-4 text-xs text-marino/70">
-                {x.nombre} · {formatCOP(x.premio)} · {nombrePerfil(perfiles, x.premio_entregado_por)} ·{' '}
+                {x.nombre} · {formatCOP(x.premio)} · pagó {nombrePerfil(perfiles, x.premio_entregado_por)} a las{' '}
                 {formatHora(x.premio_entregado_en)}
               </div>
             ))}
           <Fila etiqueta="Neto real" valor={formatCOP(b.neto)} />
-          <Fila etiqueta="Meta" valor={formatCOP(b.meta)} sub={b.bruto >= b.meta ? `(cumplida, +${formatCOP(b.excedente)})` : `(faltan ${formatCOP(b.faltante)})`} />
+          <Fila
+            etiqueta="Meta"
+            valor={formatCOP(b.meta)}
+            sub={b.bruto >= b.meta ? `(cumplida, +${formatCOP(b.excedente)})` : `(faltan ${formatCOP(b.faltante)})`}
+          />
         </Tarjeta>
       )}
 
@@ -218,7 +249,7 @@ export default function Reportes() {
             <Fila
               key={t}
               etiqueta={TIPOS[t]}
-              sub={`${xs.length} reg. · Ef. ${formatCOP(suma(xs.filter((i) => i.medio_pago === 'efectivo')))} · Tr. ${formatCOP(
+              sub={`${plural(xs.length, 'registro')} · Ef. ${formatCOP(suma(xs.filter((i) => i.medio_pago === 'efectivo')))} · Tr. ${formatCOP(
                 suma(xs.filter((i) => i.medio_pago === 'transferencia')),
               )}`}
               valor={formatCOP(suma(xs))}
@@ -232,14 +263,14 @@ export default function Reportes() {
       <Tarjeta titulo="Por punto">
         {(bancos ?? []).map((bn) => {
           const xs = validos.filter((i) => i.banco_id === bn.id);
-          return <Fila key={bn.id} etiqueta={bn.nombre} sub={`${xs.length} recogidas`} valor={formatCOP(suma(xs))} />;
+          return <Fila key={bn.id} etiqueta={bn.nombre} sub={plural(xs.length, 'recogida')} valor={formatCOP(suma(xs))} />;
         })}
       </Tarjeta>
 
-      <Tarjeta titulo="Por usuario">
+      <Tarjeta titulo="Por persona que registró">
         {(perfiles ?? []).map((p) => {
           const xs = validos.filter((i) => i.registrado_por === p.id);
-          return <Fila key={p.id} etiqueta={p.nombre} sub={`${xs.length} registros`} valor={formatCOP(suma(xs))} />;
+          return <Fila key={p.id} etiqueta={p.nombre} sub={plural(xs.length, 'registro')} valor={formatCOP(suma(xs))} />;
         })}
       </Tarjeta>
 
@@ -252,22 +283,11 @@ export default function Reportes() {
           ))}
       </Tarjeta>
 
-      <Tarjeta titulo={`Auditoría (${data.auditoria.length})`}>
-        <ul className="max-h-[60vh] space-y-1.5 overflow-y-auto text-sm">
-          {data.auditoria.map((a) => (
-            <li key={a.id} className="border-b border-marino/10 pb-1.5">
-              <div className="flex justify-between gap-2 text-xs text-marino/60">
-                <span>
-                  {formatFechaHora(a.fecha)} · {a.usuario ? nombrePerfil(perfiles, a.usuario) : 'sistema'}
-                </span>
-                <span>
-                  {a.tabla} #{a.registro_id ?? ''} · {a.accion}
-                </span>
-              </div>
-              <div className="break-words">{resumenCambio(a)}</div>
-            </li>
-          ))}
-        </ul>
+      <Tarjeta titulo="Actividad del día">
+        <p className="mb-3 text-xs text-marino/60">
+          Todo lo que se ha hecho en el sistema y quién lo hizo, lo más reciente arriba.
+        </p>
+        <Actividad eventos={eventos} />
       </Tarjeta>
     </div>
   );

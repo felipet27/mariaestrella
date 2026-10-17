@@ -15,14 +15,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
   const { pendientes } = usePendientes(true, alEnviar);
 
-  const links = [
-    { to: '/admin', label: '🏠 Inicio', end: true },
-    { to: '/admin/registrar', label: '➕ Registrar' },
-    { to: '/admin/historial', label: '📋 Historial' },
-    { to: '/admin/productos', label: '🍽️ Productos' },
-    { to: '/admin/bingos', label: '🎱 Bingos' },
-    { to: '/admin/reportes', label: '📊 Reportes' },
-    ...(perfil?.usuario === 'felipe' ? [{ to: '/admin/pruebas', label: '🧪 Pruebas' }] : []),
+  const links: { to: string; icono: string; label: string; end?: boolean; principal?: boolean }[] = [
+    { to: '/admin', icono: '🏠', label: 'Inicio', end: true },
+    { to: '/admin/registrar', icono: '➕', label: 'Registrar', principal: true },
+    { to: '/admin/historial', icono: '📋', label: 'Historial' },
+    { to: '/admin/productos', icono: '🍽️', label: 'Productos' },
+    { to: '/admin/bingos', icono: '🎱', label: 'Bingos' },
+    { to: '/admin/reportes', icono: '📊', label: 'Reportes' },
+    ...(perfil?.usuario === 'felipe' ? [{ to: '/admin/pruebas', icono: '🧪', label: 'Pruebas' }] : []),
   ];
 
   return (
@@ -47,18 +47,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             Salir
           </button>
         </div>
-        <nav className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-2 pb-2 [scrollbar-width:none]">
+        {/* PC / tablet: fila centrada debajo del encabezado */}
+        <nav className="mx-auto hidden max-w-4xl flex-wrap justify-center gap-1.5 px-4 pb-3 md:flex" aria-label="Secciones">
           {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
               end={l.end}
               className={({ isActive }) =>
-                `shrink-0 rounded-full px-4 py-2 text-sm font-bold whitespace-nowrap ${
-                  isActive ? 'bg-dorado text-marino' : 'bg-marino/30 text-crema'
+                `flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                  isActive ? 'bg-dorado text-marino shadow' : 'text-crema/85 hover:bg-white/10'
                 }`
               }
             >
+              <span aria-hidden="true">{l.icono}</span>
               {l.label}
             </NavLink>
           ))}
@@ -69,7 +71,43 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </Link>
         )}
       </header>
-      <main className="mx-auto max-w-3xl px-4 pb-16 pt-4">{children}</main>
+      <main className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:pb-16">{children}</main>
+
+      {/* Celular: barra fija abajo, como una app */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-dorado/30 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(20,40,90,0.08)] backdrop-blur md:hidden"
+        aria-label="Secciones"
+      >
+        <div className="mx-auto grid max-w-lg" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-0.5 pb-1.5 pt-2 text-[10px] font-bold leading-none ${
+                  isActive ? 'text-real' : 'text-marino/50'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && <span className="absolute inset-x-3 top-0 h-[3px] rounded-b-full bg-dorado" />}
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-lg ${
+                      l.principal ? 'bg-dorado shadow' : isActive ? 'bg-real/10' : ''
+                    }`}
+                  >
+                    {l.icono}
+                  </span>
+                  <span className="max-w-full truncate">{l.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
@@ -123,32 +161,24 @@ export function Ayuda({ children, className = '' }: { children: ReactNode; class
   );
 }
 
-/** Bloque desplegable "¿Cómo funciona?" que recuerda si el usuario lo cerró. */
-export function GuiaRapida({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
-  const clave = `guia:${id}`;
-  const [abierta, setAbierta] = useState(() => {
-    try {
-      return localStorage.getItem(clave) !== 'cerrada';
-    } catch {
-      return true;
-    }
-  });
-  const cambiar = () => {
-    const nueva = !abierta;
-    setAbierta(nueva);
-    try {
-      localStorage.setItem(clave, nueva ? 'abierta' : 'cerrada');
-    } catch {
-      /* sin almacenamiento */
-    }
-  };
+/** Ayuda desplegable de cada sección: siempre empieza compacta; se abre con la flecha. */
+export function GuiaRapida({ titulo = '¿Cómo funciona esta sección?', children }: { titulo?: string; children: ReactNode }) {
+  const [abierta, setAbierta] = useState(false);
   return (
-    <section className="rounded-2xl border-2 border-real/20 bg-white/70">
-      <button type="button" onClick={cambiar} className="flex w-full items-center justify-between px-4 py-3 text-left">
-        <span className="font-bold text-real">📖 {titulo}</span>
-        <span className="text-sm font-semibold text-real/70">{abierta ? 'Ocultar ▲' : 'Ver ▼'}</span>
+    <section className={`rounded-2xl border transition-colors ${abierta ? 'border-real/30 bg-white' : 'border-real/15 bg-white/60'}`}>
+      <button
+        type="button"
+        onClick={() => setAbierta(!abierta)}
+        aria-expanded={abierta}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
+      >
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-real/10 text-sm font-black text-real">?</span>
+        <span className="flex-1 text-sm font-bold text-real">{titulo}</span>
+        <span className={`text-real/70 transition-transform ${abierta ? 'rotate-180' : ''}`} aria-hidden="true">
+          ▼
+        </span>
       </button>
-      {abierta && <div className="px-4 pb-4 text-sm leading-relaxed text-marino/85">{children}</div>}
+      {abierta && <div className="animar-entrar px-4 pb-4 text-sm leading-relaxed text-marino/85">{children}</div>}
     </section>
   );
 }
