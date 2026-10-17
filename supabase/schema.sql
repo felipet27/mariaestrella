@@ -470,7 +470,7 @@ begin
      where not exists (select 1 from productos p where lower(p.nombre) = lower(m.nombre));
   end if;
 
-  update productos set agotado = false, activo = true;
+  update productos set agotado = false, activo = true where agotado or not activo;
 
   truncate auditoria restart identity;
   insert into auditoria (tabla, registro_id, accion, usuario)

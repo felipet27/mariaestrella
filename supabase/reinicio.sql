@@ -6,8 +6,9 @@ update public.config_privada set meta = 50000000 where id = 1;
 
 truncate public.ingresos, public.auditoria restart identity cascade;
 update public.bingos set estado = 'programado', premio_entregado = false,
-                         premio_entregado_por = null, premio_entregado_en = null, actualizado_en = now();
-update public.productos set agotado = false;
+                         premio_entregado_por = null, premio_entregado_en = null, actualizado_en = now()
+ where id > 0;
+update public.productos set agotado = false where agotado;
 truncate public.auditoria restart identity;  -- limpia lo que dejaron los update anteriores
 select public.recalcular_progreso();          -- truncate no dispara los triggers
 
