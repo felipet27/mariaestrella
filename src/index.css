@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Paleta de la Parroquia María Estrella (sección 8.1). Cambiar aquí en un solo lugar. */
+@theme {
+  --color-marino: #14285a;
+  --color-real: #24488c;
+  --color-claro: #5a7db8;
+  --color-dorado: #d4a537;
+  --color-dorado-claro: #f2cf6b;
+  --color-crema: #fbf4e2;
+  --color-rojo: #c2412d;
+  --color-verde: #1e6e73;
+
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  --azul-marino: var(--color-marino);
+  --azul-real: var(--color-real);
+  --azul-claro: var(--color-claro);
+  --dorado: var(--color-dorado);
+  --dorado-claro: var(--color-dorado-claro);
+  --crema: var(--color-crema);
+  --rojo-manto: var(--color-rojo);
+  --verde-manto: var(--color-verde);
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--crema);
+  color: var(--azul-marino);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brillo que recorre el relleno del termómetro */
+@keyframes brillo {
+  0% { transform: translateY(110%); }
+  100% { transform: translateY(-110%); }
+}
+
+@keyframes latido {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+@keyframes resplandor {
+  0%, 100% { filter: drop-shadow(0 0 18px rgba(242, 207, 107, 0.75)); }
+  50% { filter: drop-shadow(0 0 42px rgba(242, 207, 107, 1)); }
+}
+
+@keyframes titilar {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animar-latido { animation: latido 1.6s ease-in-out infinite; }
+.animar-resplandor { animation: resplandor 2.4s ease-in-out infinite; }
+.animar-entrar { animation: entrar 0.35s ease-out both; }
+
+/* Líneas punteadas del menú, al estilo de la lista impresa */
+.puntos {
+  flex: 1;
+  border-bottom: 0.12em dotted currentColor;
+  opacity: 0.45;
+  margin: 0 0.35em 0.28em;
+  min-width: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animar-latido, .animar-resplandor { animation: none; }
+}
