@@ -7,7 +7,19 @@ import { EVENTO_INICIO, formatCOP, formatHora, hace, MEDIOS } from '../../lib/fo
 
 const UNA_HORA = 60 * 60 * 1000;
 
-function Cifra({ etiqueta, valor, destacado, tono }: { etiqueta: string; valor: string; destacado?: boolean; tono?: 'verde' | 'rojo' }) {
+function Cifra({
+  etiqueta,
+  valor,
+  destacado,
+  tono,
+  nota,
+}: {
+  etiqueta: string;
+  valor: string;
+  destacado?: boolean;
+  tono?: 'verde' | 'rojo';
+  nota?: string;
+}) {
   return (
     <div
       className={`rounded-2xl p-3 ${
@@ -24,6 +36,7 @@ function Cifra({ etiqueta, valor, destacado, tono }: { etiqueta: string; valor: 
       >
         {valor}
       </div>
+      {nota && <div className={`mt-0.5 text-xs ${destacado ? 'text-crema/70' : 'text-marino/60'}`}>{nota}</div>}
     </div>
   );
 }
@@ -73,7 +86,15 @@ export default function Inicio() {
           ) : (
             <Cifra etiqueta="Faltante" valor={formatCOP(b.faltante)} />
           )}
-          <Cifra etiqueta="Neto si se entregan todos" valor={formatCOP(b.neto_proyectado)} />
+          {b.premios_totales - b.premios_entregados > 0 ? (
+            <Cifra
+              etiqueta="Premios por entregar"
+              valor={formatCOP(b.premios_totales - b.premios_entregados)}
+              nota={`Neto final estimado: ${formatCOP(b.neto_proyectado)}`}
+            />
+          ) : (
+            <Cifra etiqueta="Premios" valor="✓ Todos entregados" tono="verde" />
+          )}
         </div>
       )}
 
