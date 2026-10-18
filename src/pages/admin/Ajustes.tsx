@@ -510,7 +510,7 @@ function Reinicio() {
   return (
     <div>
       <ul className="mb-3 list-disc pl-5 text-sm text-marino/80">
-        <li>Borra los ingresos de las pruebas (el termómetro vuelve a 0 %, o a lo que haya en Banco general).</li>
+        <li>Borra los ingresos y gastos de las pruebas (el termómetro vuelve a 0 %, o a lo que haya en Banco general).</li>
         <li>Bingos a su estado inicial; quita los bingos extra.</li>
         <li>Ningún producto agotado ni oculto.</li>
         <li>Meta en $50.000.000 y actividad vacía.</li>
@@ -523,7 +523,7 @@ function Reinicio() {
           className="mt-0.5 h-5 w-5"
         />
         <span>
-          Conservar lo registrado en <b>Banco general</b> (dinero de antes del evento). Recomendado: déjelo marcado.
+          Conservar lo registrado en <b>Banco general</b> (ingresos y gastos de antes del evento). Recomendado: déjelo marcado.
         </span>
       </label>
       <label className="mb-3 flex items-start gap-2 text-sm font-semibold">

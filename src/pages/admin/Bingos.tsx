@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import MontoInput from '../../components/MontoInput';
-import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Opcion, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../lib/auth';
-import { useBingosAdmin, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
+import { useBancos, useBingosAdmin, usePerfiles, nombrePerfil } from '../../lib/useAdmin';
+import { opcionesOrigen } from '../../lib/gastos';
 import { mensajeError, supabase } from '../../lib/supabase';
 import { formatCOP, formatHora, horaInput, isoDesdeHora } from '../../lib/format';
-import type { Bingo } from '../../lib/tipos';
+import type { Bingo, OrigenGasto } from '../../lib/tipos';
 
 interface Edicion {
   id: number;
@@ -45,6 +46,8 @@ export default function Bingos() {
   const [ocupado, setOcupado] = useState(false);
   const [edicion, setEdicion] = useState<Edicion | null>(null);
   const [entrega, setEntrega] = useState<{ bingo: Bingo; entregado: boolean } | null>(null);
+  const [origenPremio, setOrigenPremio] = useState<{ origen: OrigenGasto; banco_id: number | null } | null>(null);
+  const { data: bancos } = useBancos();
 
   const rpc = async (fn: string, args: Record<string, unknown>, ok: string) => {
     setOcupado(true);
@@ -96,7 +99,7 @@ export default function Bingos() {
             Cuando alguien cante bingo, toque <b>■ Terminar juego</b>. El aviso desaparece de la pantalla.
           </li>
           <li>
-            Al pagarle el premio al ganador, un editor toca <b>💰 Premio entregado</b>. Así se descuenta del neto.
+            Al pagarle el premio al ganador, un editor toca <b>💰 Premio entregado</b> y elige de qué plata salió. Queda como gasto y se resta del neto y del termómetro.
           </li>
           <li>
             Un bingo terminado queda como <b>✓ Jugado</b> y no se puede volver a jugar. Si necesitan otro, Felipe puede agregarlo
@@ -282,28 +285,62 @@ export default function Bingos() {
         confirmar={entrega?.entregado ? 'Sí, se entregó' : 'Desmarcar'}
         peligro={!entrega?.entregado}
         ocupado={ocupado}
+        // Un premio en dinero necesita saber de qué plata salió
+        deshabilitado={!!entrega?.entregado && !!entrega.bingo.premio && !origenPremio}
         onConfirmar={async () => {
           if (!entrega) return;
+          const args: Record<string, unknown> = { p_bingo_id: entrega.bingo.id, p_entregado: entrega.entregado };
+          if (entrega.entregado && origenPremio) {
+            args.p_origen = origenPremio.origen;
+            args.p_banco_id = origenPremio.banco_id;
+          }
           const ok = await rpc(
             'marcar_premio_entregado',
-            { p_bingo_id: entrega.bingo.id, p_entregado: entrega.entregado },
-            entrega.entregado ? `Premio del ${entrega.bingo.nombre} entregado` : 'Premio desmarcado',
+            args,
+            entrega.entregado ? `Premio del ${entrega.bingo.nombre} entregado: se restó como gasto` : 'Premio desmarcado: el gasto se anuló',
           );
-          if (ok) setEntrega(null);
+          if (ok) {
+            setEntrega(null);
+            setOrigenPremio(null);
+          }
         }}
-        onCancelar={() => setEntrega(null)}
+        onCancelar={() => {
+          setEntrega(null);
+          setOrigenPremio(null);
+        }}
       >
         {entrega && (
-          <p className="text-center text-lg">
-            {entrega.entregado ? '¿Confirmar entrega de ' : '¿Desmarcar '}
-            <b className="tabular text-2xl">{entrega.bingo.premio ? formatCOP(entrega.bingo.premio) : entrega.bingo.premio_texto}</b>
-            {' del '}
-            <b>{entrega.bingo.nombre}</b>?
-            <br />
-            <span className="text-sm text-marino/70">
-              {entrega.entregado ? 'Se descuenta del neto. El termómetro público no cambia.' : 'Vuelve a sumar al neto.'}
-            </span>
-          </p>
+          <>
+            <p className="text-center text-lg">
+              {entrega.entregado ? '¿Confirmar entrega de ' : '¿Desmarcar '}
+              <b className="tabular text-2xl">{entrega.bingo.premio ? formatCOP(entrega.bingo.premio) : entrega.bingo.premio_texto}</b>
+              {' del '}
+              <b>{entrega.bingo.nombre}</b>?
+              <br />
+              <span className="text-sm text-marino/70">
+                {entrega.entregado
+                  ? 'Se registra como gasto (Premios): se resta del neto y del termómetro.'
+                  : 'El gasto del premio se anula y vuelve a sumar.'}
+              </span>
+            </p>
+            {entrega.entregado && !!entrega.bingo.premio && (
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-bold">¿De qué plata salió el premio?</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {opcionesOrigen(bancos).map((o) => (
+                    <Opcion
+                      key={`${o.origen}:${o.banco_id ?? ''}`}
+                      activo={origenPremio?.origen === o.origen && origenPremio.banco_id === o.banco_id}
+                      onClick={() => setOrigenPremio({ origen: o.origen, banco_id: o.banco_id })}
+                      className="min-h-11 text-sm"
+                    >
+                      {o.nombre}
+                    </Opcion>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </ConfirmModal>
     </div>

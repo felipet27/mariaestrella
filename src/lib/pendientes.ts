@@ -1,13 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import type { Concepto, MedioPago, TipoIngreso } from './tipos';
+import type { CategoriaGasto, Concepto, MedioPago, OrigenGasto, TipoIngreso } from './tipos';
 
 /**
  * Cola de registros sin conexión. Si no hay señal al registrar, el ingreso se
  * guarda en el celular y se envía solo cuando vuelve la red. Como cada uno
  * lleva su client_id, reenviarlo nunca lo duplica (idempotencia en la BD).
  */
-export interface Pendiente {
+/** Gasto guardado sin señal (solo editores). */
+export interface PendienteGasto {
+  clase: 'gasto';
+  client_id: string;
+  categoria: CategoriaGasto;
+  origen: OrigenGasto;
+  banco_id: number | null;
+  medio_pago: MedioPago;
+  monto: number;
+  descripcion: string;
+  lugar: string;
+  creado: string;
+  error?: string;
+}
+
+export type Pendiente = PendienteIngreso | PendienteGasto;
+
+export interface PendienteIngreso {
+  clase?: 'ingreso';
   client_id: string;
   tipo: TipoIngreso;
   banco_id: number | null;
@@ -58,7 +76,21 @@ export function esErrorDeRed(e: unknown): boolean {
   return /failed to fetch|networkerror|load failed|network request failed|timeout|fetch failed|err_internet|aborted/i.test(msg);
 }
 
-export async function enviarIngreso(p: Omit<Pendiente, 'lugar' | 'creado' | 'error'>): Promise<number> {
+export async function enviarGasto(p: Omit<PendienteGasto, 'clase' | 'lugar' | 'creado' | 'error'>): Promise<number> {
+  const { data, error } = await supabase.rpc('registrar_gasto', {
+    p_client_id: p.client_id,
+    p_categoria: p.categoria,
+    p_origen: p.origen,
+    p_banco_id: p.origen === 'banco' ? p.banco_id : null,
+    p_monto: p.monto,
+    p_descripcion: p.descripcion,
+    p_medio_pago: p.medio_pago,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+export async function enviarIngreso(p: Omit<PendienteIngreso, 'clase' | 'lugar' | 'creado' | 'error'>): Promise<number> {
   const args: Record<string, unknown> = {
     p_client_id: p.client_id,
     p_tipo: p.tipo,
@@ -88,7 +120,8 @@ export async function sincronizarPendientes(): Promise<number> {
   try {
     for (const p of leerPendientes()) {
       try {
-        await enviarIngreso(p);
+        if (p.clase === 'gasto') await enviarGasto(p);
+        else await enviarIngreso(p);
         quitarPendiente(p.client_id);
         enviados++;
       } catch (e) {

@@ -80,6 +80,28 @@ export interface Ingreso {
 
 export type Concepto = 'general' | 'producto' | 'tablas_bingo';
 
+export type CategoriaGasto = 'premios' | 'insumos' | 'transporte' | 'otros';
+/** De qué plata salió: un punto/banco, lo de donaciones, lo de remates o varios */
+export type OrigenGasto = 'banco' | 'donacion' | 'remate' | 'general';
+
+export interface Gasto {
+  id: number;
+  client_id: string;
+  categoria: CategoriaGasto;
+  origen: OrigenGasto;
+  banco_id: number | null;
+  medio_pago: MedioPago;
+  monto: number;
+  descripcion: string;
+  bingo_id: number | null;
+  registrado_por: string;
+  registrado_en: string;
+  anulado: boolean;
+  anulado_por: string | null;
+  anulado_en: string | null;
+  motivo_anulacion: string | null;
+}
+
 export interface Banco {
   id: number;
   nombre: string;
@@ -96,6 +118,8 @@ export interface Balance {
   meta: number;
   faltante: number;
   excedente: number;
+  /** Total de gastos (007). Puede no venir si aún no se corre el SQL. */
+  gastos?: number;
 }
 
 export interface ResumenBanco {

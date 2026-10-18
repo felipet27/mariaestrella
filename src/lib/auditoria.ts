@@ -139,6 +139,30 @@ export function describirAuditoria(a: Auditoria, ctx: Contexto): EventoAuditoria
       return { ...base, icono, categoria: 'bingos', texto: partes.join(' y '), importante };
     }
 
+    case 'gastos': {
+      const de = despues.origen === 'banco' ? `del ${ctx.nombreBanco(despues.banco_id as number)}` : despues.origen === 'donacion' ? 'de lo de donaciones' : despues.origen === 'remate' ? 'de lo de remates' : '(varios)';
+      if (a.accion === 'INSERT') {
+        return {
+          ...base,
+          icono: '➖',
+          categoria: 'dinero',
+          texto: `registró un gasto de ${cop(despues.monto)} ${de}: ${txt(despues.descripcion)} · gasto #${txt(despues.id)}`,
+          importante: true,
+        };
+      }
+      if (cambio('anulado') && despues.anulado) {
+        return {
+          ...base,
+          icono: '✕',
+          categoria: 'dinero',
+          texto: `anuló el gasto #${txt(despues.id)} de ${cop(despues.monto)} (${txt(despues.descripcion)})`,
+          detalle: despues.motivo_anulacion ? `Motivo: ${txt(despues.motivo_anulacion)}` : undefined,
+          importante: true,
+        };
+      }
+      return null;
+    }
+
     case 'config_privada':
       if (cambio('meta')) {
         return {

@@ -2,14 +2,15 @@ import { useMemo, useState } from 'react';
 import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { Cargando } from '../../components/ProtectedRoute';
 import { useToast } from '../../components/Toast';
-import { useBancos, useBingosAdmin, usePerfiles, useProductosAdmin, nombrePerfil } from '../../lib/useAdmin';
+import { useBancos, useBingosAdmin, useGastos, usePerfiles, useProductosAdmin, nombrePerfil } from '../../lib/useAdmin';
+import { CATEGORIAS_GASTO, nombreOrigen, sumaGastos } from '../../lib/gastos';
 import { claveItem, nombreItem } from '../../lib/conceptos';
 import { useLiveQuery } from '../../lib/useLiveQuery';
 import { mensajeError, q, supabase } from '../../lib/supabase';
 import { formatCOP, formatHora, horaBogota, plural, TIPOS } from '../../lib/format';
 import { CATEGORIAS_AUDITORIA, describirAuditoria, type CategoriaAuditoria, type EventoAuditoria } from '../../lib/auditoria';
 import { descargarReporteExcel } from '../../lib/excel';
-import type { Auditoria, Balance, Banco, Ingreso, Producto } from '../../lib/tipos';
+import type { Auditoria, Balance, Banco, CategoriaGasto, Ingreso, Producto } from '../../lib/tipos';
 
 interface Datos {
   ingresos: Ingreso[];
@@ -199,6 +200,7 @@ export default function Reportes() {
   const { data: bancos } = useBancos();
   const { data: bingos } = useBingosAdmin();
   const { data: productos } = useProductosAdmin();
+  const { data: gastos } = useGastos();
   const [descargando, setDescargando] = useState(false);
   const { data, error } = useLiveQuery<Datos>(
     ['ingresos', 'bingos', 'productos'],
@@ -232,6 +234,30 @@ export default function Reportes() {
   const validos = data.ingresos.filter((i) => !i.anulada);
   const suma = (xs: Ingreso[]) => xs.reduce((s, i) => s + Number(i.monto), 0);
   const b = data.balance;
+  // Gastos: el neto es lo que se tiene (ingresos − gastos)
+  const gastosValidos = (gastos ?? []).filter((g) => !g.anulado);
+  const totalGastos = sumaGastos(gastosValidos);
+  const neto = (b?.bruto ?? suma(validos)) - totalGastos;
+  const porPunto = [
+    ...(bancos ?? []).map((bn) => ({
+      clave: `b:${bn.id}`,
+      nombre: bn.nombre,
+      ingresos: suma(validos.filter((i) => i.banco_id === bn.id)),
+      gastos: sumaGastos(gastosValidos.filter((g) => g.origen === 'banco' && g.banco_id === bn.id)),
+    })),
+    ...(['donacion', 'remate'] as const).map((t) => ({
+      clave: t,
+      nombre: t === 'donacion' ? 'Donaciones' : 'Remates',
+      ingresos: suma(validos.filter((i) => i.tipo === t)),
+      gastos: sumaGastos(gastosValidos.filter((g) => g.origen === t)),
+    })),
+    {
+      clave: 'general',
+      nombre: 'Varios / sin definir',
+      ingresos: 0,
+      gastos: sumaGastos(gastosValidos.filter((g) => g.origen === 'general')),
+    },
+  ].filter((p) => p.ingresos || p.gastos);
 
   const descargar = async () => {
     setDescargando(true);
@@ -243,6 +269,7 @@ export default function Reportes() {
         perfiles: perfiles ?? [],
         bingos: bingos ?? [],
         productos: productos ?? [],
+        gastos: gastos ?? [],
         eventos,
       });
       toast('✓ Reporte descargado');
@@ -274,26 +301,28 @@ export default function Reportes() {
         className="flex h-16 w-full flex-col items-center justify-center rounded-2xl bg-verde text-lg font-extrabold text-white shadow-md disabled:opacity-60"
       >
         {descargando ? 'Generando…' : '⬇ Descargar reporte en Excel'}
-        <span className="text-xs font-semibold text-white/80">Resumen, por producto, ingresos, por hora, bingos y actividad</span>
+        <span className="text-xs font-semibold text-white/80">Resumen con gastos y neto, por producto, ingresos, gastos, bingos y actividad</span>
       </button>
 
       {b && (
         <Tarjeta titulo="Balance">
           <Fila etiqueta="Recaudo bruto" sub="todo lo que entró" valor={formatCOP(b.bruto)} />
-          <Fila etiqueta="Premios de bingo pagados" valor={`− ${formatCOP(b.premios_entregados)}`} />
-          {(bingos ?? [])
-            .filter((x) => x.premio_entregado)
-            .map((x) => (
-              <div key={x.id} className="pl-4 text-xs text-marino/70">
-                {x.nombre} · {formatCOP(x.premio)} · pagó {nombrePerfil(perfiles, x.premio_entregado_por)} a las{' '}
-                {formatHora(x.premio_entregado_en)}
-              </div>
-            ))}
-          <Fila etiqueta="Neto real" valor={formatCOP(b.neto)} />
+          {(Object.keys(CATEGORIAS_GASTO) as CategoriaGasto[]).map((c) => {
+            const t = sumaGastos(gastosValidos.filter((g) => g.categoria === c));
+            if (!t) return null;
+            return (
+              <Fila key={c} etiqueta={`− Gastos: ${CATEGORIAS_GASTO[c].icono} ${CATEGORIAS_GASTO[c].nombre}`} valor={`− ${formatCOP(t)}`} />
+            );
+          })}
+          <Fila etiqueta="Total gastos" valor={`− ${formatCOP(totalGastos)}`} />
+          <div className="my-1 flex items-baseline justify-between rounded-lg bg-marino px-3 py-2 text-crema">
+            <span className="font-bold">Neto real (lo que se tiene)</span>
+            <span className="tabular text-lg font-black">{formatCOP(neto)}</span>
+          </div>
           <Fila
             etiqueta="Meta"
             valor={formatCOP(b.meta)}
-            sub={b.bruto >= b.meta ? `(cumplida, +${formatCOP(b.excedente)})` : `(faltan ${formatCOP(b.faltante)})`}
+            sub={neto >= b.meta ? `(cumplida, +${formatCOP(neto - b.meta)})` : `(faltan ${formatCOP(b.meta - neto)})`}
           />
         </Tarjeta>
       )}
@@ -324,11 +353,54 @@ export default function Reportes() {
         <PorProducto ingresos={validos.filter((i) => i.tipo === 'recaudo_banco')} productos={productos ?? []} bancos={bancos ?? []} />
       </Tarjeta>
 
-      <Tarjeta titulo="Por punto">
-        {(bancos ?? []).map((bn) => {
-          const xs = validos.filter((i) => i.banco_id === bn.id);
-          return <Fila key={bn.id} etiqueta={bn.nombre} sub={plural(xs.length, 'recogida')} valor={formatCOP(suma(xs))} />;
-        })}
+      <Tarjeta titulo="Por punto: ingresos, gastos y neto">
+        <div className="-mx-1 overflow-x-auto">
+          <table className="w-full min-w-[320px] text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-marino/50">
+                <th className="px-1 py-1 font-bold">Punto</th>
+                <th className="px-1 py-1 text-right font-bold">Ingresos</th>
+                <th className="px-1 py-1 text-right font-bold">Gastos</th>
+                <th className="px-1 py-1 text-right font-bold">Neto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-marino/10">
+              {porPunto.map((p) => (
+                <tr key={p.clave}>
+                  <td className="px-1 py-1.5 font-semibold">{p.nombre}</td>
+                  <td className="tabular px-1 py-1.5 text-right">{formatCOP(p.ingresos)}</td>
+                  <td className="tabular px-1 py-1.5 text-right text-rojo">{p.gastos ? `− ${formatCOP(p.gastos)}` : '—'}</td>
+                  <td className="tabular px-1 py-1.5 text-right font-black">{formatCOP(p.ingresos - p.gastos)}</td>
+                </tr>
+              ))}
+              <tr className="bg-crema font-black">
+                <td className="px-1 py-1.5">Total</td>
+                <td className="tabular px-1 py-1.5 text-right">{formatCOP(b?.bruto ?? suma(validos))}</td>
+                <td className="tabular px-1 py-1.5 text-right text-rojo">− {formatCOP(totalGastos)}</td>
+                <td className="tabular px-1 py-1.5 text-right">{formatCOP(neto)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Tarjeta>
+
+      <Tarjeta titulo={`Gastos (${gastosValidos.length})`}>
+        {gastosValidos.length === 0 && <p className="text-sm text-marino/60">Sin gastos registrados.</p>}
+        <ul className="divide-y divide-marino/10">
+          {gastosValidos.map((g) => (
+            <li key={g.id} className="py-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-semibold">
+                  {CATEGORIAS_GASTO[g.categoria].icono} {g.descripcion}
+                </span>
+                <span className="tabular shrink-0 font-bold text-rojo">− {formatCOP(g.monto)}</span>
+              </div>
+              <div className="text-xs text-marino/60">
+                {formatHora(g.registrado_en)} · salió de {nombreOrigen(g, bancos)} · {nombrePerfil(perfiles, g.registrado_por)}
+              </div>
+            </li>
+          ))}
+        </ul>
       </Tarjeta>
 
       <Tarjeta titulo="Por persona que registró">

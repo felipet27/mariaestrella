@@ -1,11 +1,12 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { usePendientes } from '../lib/pendientes';
 import { useToast } from './Toast';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { perfil, logout } = useAuth();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
   // Envía en segundo plano los registros guardados sin señal, en cualquier página del panel
@@ -14,6 +15,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     [toast],
   );
   const { pendientes } = usePendientes(true, alEnviar);
+
+  // Registrar incluye ingresos y gastos: queda marcado en las dos pantallas
+  const activa = (to: string, isActive: boolean) => isActive || (to === '/admin/registrar' && pathname.startsWith('/admin/gastos'));
 
   const links: { to: string; icono: string; label: string; end?: boolean; principal?: boolean }[] = [
     { to: '/admin', icono: '🏠', label: 'Inicio', end: true },
@@ -56,7 +60,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               end={l.end}
               className={({ isActive }) =>
                 `flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
-                  isActive ? 'bg-dorado text-marino shadow' : 'text-crema/85 hover:bg-white/10'
+                  activa(l.to, isActive) ? 'bg-dorado text-marino shadow' : 'text-crema/85 hover:bg-white/10'
                 }`
               }
             >
@@ -86,17 +90,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               end={l.end}
               className={({ isActive }) =>
                 `relative flex flex-col items-center justify-center gap-0.5 pb-1.5 pt-2 text-[10px] font-bold leading-none ${
-                  isActive ? 'text-real' : 'text-marino/50'
+                  activa(l.to, isActive) ? 'text-real' : 'text-marino/50'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  {isActive && <span className="absolute inset-x-3 top-0 h-[3px] rounded-b-full bg-dorado" />}
+                  {activa(l.to, isActive) && <span className="absolute inset-x-3 top-0 h-[3px] rounded-b-full bg-dorado" />}
                   <span
                     aria-hidden="true"
                     className={`flex h-8 w-8 items-center justify-center rounded-full text-lg ${
-                      l.principal ? 'bg-dorado shadow' : isActive ? 'bg-real/10' : ''
+                      l.principal ? 'bg-dorado shadow' : activa(l.to, isActive) ? 'bg-real/10' : ''
                     }`}
                   >
                     {l.icono}
@@ -158,6 +162,35 @@ export function Opcion({
       {children}
       {sub && <span className={`mt-1 text-[11px] font-medium leading-snug ${activo ? 'text-marino/80' : 'text-marino/55'}`}>{sub}</span>}
     </button>
+  );
+}
+
+/** Dentro de Registrar: elegir entre ingreso (suma) y gasto (resta). El gasto es solo para editores. */
+export function SelectorRegistro({ actual }: { actual: 'ingreso' | 'gasto' }) {
+  const { esEditor } = useAuth();
+  if (!esEditor) return null;
+  const base = 'flex h-14 flex-1 flex-col items-center justify-center rounded-xl text-base font-extrabold leading-tight transition-colors';
+  return (
+    <div className="flex gap-1 rounded-2xl border border-dorado/30 bg-white p-1 shadow-sm" role="tablist" aria-label="Tipo de registro">
+      <Link
+        to="/admin/registrar"
+        role="tab"
+        aria-selected={actual === 'ingreso'}
+        className={`${base} ${actual === 'ingreso' ? 'bg-verde text-white shadow' : 'text-marino/55'}`}
+      >
+        💵 Ingreso
+        <span className={`text-[11px] font-semibold ${actual === 'ingreso' ? 'text-white/80' : 'text-marino/45'}`}>Entra plata · suma</span>
+      </Link>
+      <Link
+        to="/admin/gastos"
+        role="tab"
+        aria-selected={actual === 'gasto'}
+        className={`${base} ${actual === 'gasto' ? 'bg-rojo text-white shadow' : 'text-marino/55'}`}
+      >
+        ➖ Gasto
+        <span className={`text-[11px] font-semibold ${actual === 'gasto' ? 'text-white/80' : 'text-marino/45'}`}>Sale plata · resta</span>
+      </Link>
+    </div>
   );
 }
 

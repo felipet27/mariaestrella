@@ -4,7 +4,8 @@ import { formatFechaHora, formatHora, horaBogota, MEDIOS, TIPOS } from './format
 import type { EventoAuditoria } from './auditoria';
 import { CATEGORIAS_AUDITORIA } from './auditoria';
 import { claveItem, nombreItem } from './conceptos';
-import type { Balance, Banco, Bingo, Ingreso, Perfil, Producto } from './tipos';
+import type { Balance, Banco, Bingo, CategoriaGasto, Gasto, Ingreso, Perfil, Producto } from './tipos';
+import { CATEGORIAS_GASTO, nombreOrigen, sumaGastos } from './gastos';
 
 type Celda = string | number | null | { value: string | number | null; [k: string]: unknown };
 type Hoja = Celda[][];
@@ -31,6 +32,7 @@ export interface DatosReporte {
   perfiles: Perfil[];
   bingos: Bingo[];
   productos: Producto[];
+  gastos: Gasto[];
   eventos: EventoAuditoria[];
 }
 
@@ -50,13 +52,23 @@ export async function descargarReporteExcel(d: DatosReporte) {
     [],
     [encabezado('Balance'), encabezado('Valor')],
   ];
+  const gastosValidos = d.gastos.filter((g) => !g.anulado);
+  const totalGastos = sumaGastos(gastosValidos);
+  const bruto = b?.bruto ?? suma(validos);
+  const neto = bruto - totalGastos;
+  resumen.push(['Recaudo bruto (todo lo que entró)', plata(bruto)]);
+  for (const c of Object.keys(CATEGORIAS_GASTO) as CategoriaGasto[]) {
+    const t = sumaGastos(gastosValidos.filter((g) => g.categoria === c));
+    if (t) resumen.push([`Gastos: ${CATEGORIAS_GASTO[c].nombre}`, plata(-t, { textColor: '#C2412D' })]);
+  }
+  resumen.push(
+    ['Total gastos', plata(-totalGastos, { textColor: '#C2412D', fontWeight: 'bold' })],
+    [negrita('Neto real (lo que se tiene)'), total(neto)],
+  );
   if (b) {
     resumen.push(
-      ['Recaudo bruto (todo lo que entró)', plata(b.bruto)],
-      ['Premios de bingo pagados', plata(-b.premios_entregados)],
-      [negrita('Neto real'), total(b.neto)],
       ['Meta', plata(b.meta)],
-      [b.bruto >= b.meta ? 'Excedente sobre la meta' : 'Faltante para la meta', plata(b.bruto >= b.meta ? b.excedente : b.faltante)],
+      [neto >= b.meta ? 'Excedente sobre la meta' : 'Faltante para la meta', plata(Math.abs(b.meta - neto))],
     );
   }
   resumen.push([], [encabezado('Por tipo'), encabezado('Registros'), encabezado('Efectivo'), encabezado('Transferencia'), encabezado('Total')]);
@@ -78,23 +90,69 @@ export async function descargarReporteExcel(d: DatosReporte) {
     total(suma(validos)),
   ]);
 
-  resumen.push([], [encabezado('Por punto'), encabezado('Recogidas'), encabezado('Efectivo'), encabezado('Transferencia'), encabezado('Total')]);
+  resumen.push(
+    [],
+    [encabezado('Por punto'), encabezado('Recogidas'), encabezado('Efectivo'), encabezado('Transferencia'), encabezado('Ingresos'), encabezado('Gastos'), encabezado('Neto')],
+  );
+  const filaPunto = (nombre: string, xs: Ingreso[], gs: Gasto[]): Celda[] => [
+    nombre,
+    xs.length,
+    plata(suma(xs.filter((i) => i.medio_pago === 'efectivo'))),
+    plata(suma(xs.filter((i) => i.medio_pago === 'transferencia'))),
+    plata(suma(xs)),
+    plata(-sumaGastos(gs), { textColor: '#C2412D' }),
+    total(suma(xs) - sumaGastos(gs)),
+  ];
   for (const bn of d.bancos) {
-    const xs = validos.filter((i) => i.banco_id === bn.id);
-    resumen.push([
-      bn.nombre,
-      xs.length,
-      plata(suma(xs.filter((i) => i.medio_pago === 'efectivo'))),
-      plata(suma(xs.filter((i) => i.medio_pago === 'transferencia'))),
-      plata(suma(xs)),
-    ]);
+    resumen.push(
+      filaPunto(
+        bn.nombre,
+        validos.filter((i) => i.banco_id === bn.id),
+        gastosValidos.filter((g) => g.origen === 'banco' && g.banco_id === bn.id),
+      ),
+    );
   }
+  resumen.push(filaPunto('Donaciones', validos.filter((i) => i.tipo === 'donacion'), gastosValidos.filter((g) => g.origen === 'donacion')));
+  resumen.push(filaPunto('Remates', validos.filter((i) => i.tipo === 'remate'), gastosValidos.filter((g) => g.origen === 'remate')));
+  const varios = gastosValidos.filter((g) => g.origen === 'general');
+  if (varios.length) resumen.push(filaPunto('Gastos varios / sin definir', [], varios));
+  resumen.push([
+    negrita('Total'),
+    { value: validos.length, fontWeight: 'bold', backgroundColor: CREMA },
+    null,
+    null,
+    total(bruto),
+    plata(-totalGastos, { textColor: '#C2412D', fontWeight: 'bold', backgroundColor: CREMA }),
+    total(neto),
+  ]);
 
   resumen.push([], [encabezado('Por persona que registró'), encabezado('Registros'), null, null, encabezado('Total')]);
   for (const p of d.perfiles) {
     const xs = validos.filter((i) => i.registrado_por === p.id);
     resumen.push([p.nombre, xs.length, null, null, plata(suma(xs))]);
   }
+
+  // ---------- Hoja: Gastos ----------
+  const hojaGastos: Hoja = [
+    ['#', 'Fecha y hora', 'Categoría', 'En qué se gastó', 'Salió de', 'Medio', 'Monto', 'Registró', 'Estado', 'Anulado por', 'Motivo de anulación'].map(
+      encabezado,
+    ),
+    ...d.gastos.map((g): Celda[] => [
+      g.id,
+      formatFechaHora(g.registrado_en),
+      CATEGORIAS_GASTO[g.categoria].nombre,
+      g.descripcion,
+      nombreOrigen(g, d.bancos),
+      MEDIOS[g.medio_pago],
+      plata(g.monto, g.anulado ? { textColor: '#999999' } : {}),
+      nombreUsuario(g.registrado_por),
+      g.anulado ? { value: 'ANULADO', textColor: '#C2412D', fontWeight: 'bold' } : 'Válido',
+      g.anulado ? nombreUsuario(g.anulado_por) : '',
+      g.motivo_anulacion ?? '',
+    ]),
+    [],
+    [negrita('Total gastos válidos'), null, null, null, null, null, total(totalGastos)],
+  ];
 
   // ---------- Hoja 2: Ingresos ----------
   const ingresos: Hoja = [
@@ -192,10 +250,11 @@ export async function descargarReporteExcel(d: DatosReporte) {
 
   const blob = await writeXlsxFile(
     [
-      { data: resumen, sheet: 'Resumen', columns: ancho(38, 12, 16, 16, 16) },
+      { data: resumen, sheet: 'Resumen', columns: ancho(38, 12, 16, 16, 16, 16, 16) },
       { data: porProducto, sheet: 'Por producto', columns: ancho(30, ...puntos.map(() => 14), 11, 16), stickyColumnsCount: 1 },
       { data: ingresos, sheet: 'Ingresos', columns: ancho(6, 24, 12, 12, 24, 14, 14, 30, 12, 10, 12, 30), stickyRowsCount: 1 },
       { data: horas, sheet: 'Por hora', columns: ancho(14, 12, 16), stickyRowsCount: 1 },
+      { data: hojaGastos, sheet: 'Gastos', columns: ancho(6, 24, 14, 36, 22, 14, 14, 12, 10, 12, 30), stickyRowsCount: 1 },
       { data: bingos, sheet: 'Bingos', columns: ancho(14, 16, 16, 12, 14, 14, 14), stickyRowsCount: 1 },
       { data: actividad, sheet: 'Actividad', columns: ancho(24, 12, 12, 70, 40), stickyRowsCount: 1 },
     ] as never,

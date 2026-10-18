@@ -1,6 +1,6 @@
 import { q, supabase } from './supabase';
 import { useLiveQuery } from './useLiveQuery';
-import type { Balance, Banco, Bingo, Perfil, Producto, ResumenBanco, ResumenTipo } from './tipos';
+import type { Balance, Banco, Bingo, Gasto, Perfil, Producto, ResumenBanco, ResumenTipo } from './tipos';
 
 export function usePerfiles() {
   return useLiveQuery<Perfil[]>(['perfiles'], () => q(supabase.from('perfiles').select('id, usuario, nombre, rol, activo')), {
@@ -16,6 +16,13 @@ export function useBancos() {
 export function useProductosAdmin() {
   return useLiveQuery<Producto[]>(['productos'], () =>
     q(supabase.from('productos').select('id, nombre, precio, categoria, emoji, orden, agotado, activo').order('orden').order('nombre')),
+  );
+}
+
+/** Gastos (007). Si el SQL aún no se corrió, devuelve error y la app sigue funcionando sin gastos. */
+export function useGastos() {
+  return useLiveQuery<Gasto[]>(['gastos'], () =>
+    q(supabase.from('gastos').select('*').order('registrado_en', { ascending: false }).limit(2000)),
   );
 }
 

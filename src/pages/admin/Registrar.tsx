@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MontoInput from '../../components/MontoInput';
 import ConfirmModal from '../../components/ConfirmModal';
-import { GuiaRapida, Opcion, Tarjeta } from '../../components/AdminLayout';
+import { GuiaRapida, Opcion, SelectorRegistro, Tarjeta } from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import { useBancos, useProductosAdmin } from '../../lib/useAdmin';
 import { mensajeError } from '../../lib/supabase';
@@ -37,7 +37,7 @@ export interface Precarga {
   corrige?: number;
 }
 
-interface Exito {
+export interface Exito {
   tipo: 'ok' | 'pendiente';
   titulo: string;
   detalle: string;
@@ -70,7 +70,7 @@ function leerBanco(): number | null {
 }
 
 /** Confirmación grande de un segundo y medio: con ruido y prisa, un toast se pierde. */
-function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void }) {
+export function PantallaExito({ exito, onCerrar }: { exito: Exito; onCerrar: () => void }) {
   useEffect(() => {
     const t = window.setTimeout(onCerrar, exito.tipo === 'ok' ? 1800 : 3200);
     return () => window.clearTimeout(t);
@@ -489,7 +489,8 @@ export default function Registrar() {
 
   return (
     <div className="space-y-4">
-      <h1 className="font-serif text-3xl font-bold text-marino">Registrar ingreso</h1>
+      <h1 className="font-serif text-3xl font-bold text-marino">Registrar</h1>
+      <SelectorRegistro actual="ingreso" />
 
       {pendientes.length > 0 && (
         <div className="rounded-2xl border-2 border-dorado bg-dorado/15 p-4">

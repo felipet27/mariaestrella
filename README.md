@@ -28,6 +28,7 @@ La especificación completa está en [termometro-iglesia.md](termometro-iglesia.
    Luego correr [supabase/003_frases_y_bingos.sql](supabase/003_frases_y_bingos.sql) (frases editables y bingos jugados no se repiten).
    Luego [supabase/004_corregir_reinicio.sql](supabase/004_corregir_reinicio.sql) y [supabase/005_desglose_productos.sql](supabase/005_desglose_productos.sql) (desglose por producto).
    Luego [supabase/006_banco_general.sql](supabase/006_banco_general.sql) (Banco general para el dinero de antes del evento).
+   Luego [supabase/007_gastos.sql](supabase/007_gastos.sql) (gastos: el neto y el termómetro son ingresos − gastos).
 7. **Project Settings → API**: copiar la *Project URL* y la *anon / publishable key*.
    La `service_role` **nunca** se usa en este proyecto.
 

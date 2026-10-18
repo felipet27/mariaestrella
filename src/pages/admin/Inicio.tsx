@@ -4,7 +4,9 @@ import { useInstalarApp } from '../../lib/instalar';
 import { GuiaRapida, Tarjeta } from '../../components/AdminLayout';
 import { useAuth } from '../../lib/auth';
 import { Cargando } from '../../components/ProtectedRoute';
-import { useBingosAdmin, useTablero } from '../../lib/useAdmin';
+import { useBingosAdmin, useGastos, useTablero } from '../../lib/useAdmin';
+import { sumaGastos } from '../../lib/gastos';
+import type { Gasto } from '../../lib/tipos';
 import { useAhora } from '../../lib/useProgreso';
 import { EVENTO_INICIO, formatCOP, formatHora, hace, MEDIOS, plural } from '../../lib/format';
 
@@ -84,16 +86,18 @@ function Cifra({
   destacado,
   tono,
   nota,
+  completo,
 }: {
   etiqueta: string;
   valor: string;
   destacado?: boolean;
   tono?: 'verde' | 'rojo';
   nota?: string;
+  completo?: boolean;
 }) {
   return (
     <div
-      className={`min-w-0 rounded-2xl p-3 ${
+      className={`min-w-0 rounded-2xl p-3 ${completo ? 'col-span-2' : ''} ${
         destacado ? 'col-span-2 bg-marino text-crema' : 'border border-dorado/30 bg-white text-marino'
       }`}
     >
@@ -120,11 +124,27 @@ export default function Inicio() {
   const { data, error, conectado } = useTablero();
   const { data: bingos } = useBingosAdmin();
   const ahora = useAhora(30_000);
+  const { data: gastos } = useGastos();
 
   if (!data) return error ? <p className="font-semibold text-rojo">{error}</p> : <Cargando />;
   const b = data.balance;
-  const pct = b && b.meta ? Math.floor((b.bruto * 100) / b.meta) : 0;
-  const metaCumplida = b ? b.bruto >= b.meta : false;
+  // Lo que se tiene: ingresos − gastos (los premios pagados ya son gastos)
+  const gastosValidos = (gastos ?? []).filter((g) => !g.anulado);
+  const totalGastos = b?.gastos ?? sumaGastos(gastosValidos);
+  const neto = b ? (b.gastos !== undefined ? b.neto : b.bruto - totalGastos) : 0;
+  const pct = b && b.meta ? Math.max(0, Math.floor((neto * 100) / b.meta)) : 0;
+  const metaCumplida = b ? neto >= b.meta : false;
+  const gastosDe = (pred: (g: Gasto) => boolean) => gastosValidos.filter(pred).reduce((s, g) => s + Number(g.monto), 0);
+  const gastosVarios = gastosDe((g) => g.origen === 'general');
+
+  /** Línea "Gastos − X · Neto Y" de un punto, solo si tuvo gastos. */
+  const LineaNeto = ({ ingreso, gasto }: { ingreso: number; gasto: number }) =>
+    gasto > 0 ? (
+      <div className="mt-0.5 flex justify-between text-xs">
+        <span className="font-semibold text-rojo">Gastos − {formatCOP(gasto)}</span>
+        <span className="font-bold text-verde">Neto {formatCOP(ingreso - gasto)}</span>
+      </div>
+    ) : null;
 
   const porTipo = (tipo: string) => data.tipos.filter((t) => t.tipo === tipo);
   const sumaTipo = (tipo: string) => porTipo(tipo).reduce((s, t) => s + Number(t.total), 0);
@@ -174,16 +194,21 @@ export default function Inicio() {
         ➕ Registrar ingreso
         <span className="text-xs font-semibold text-marino/70">Recaudo de banco, donación o remate</span>
       </Link>
+      {esEditor && (
+        <Link
+          to="/admin/gastos"
+          className="-mt-2 flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-rojo/40 bg-white text-base font-extrabold text-rojo active:scale-[0.99]"
+        >
+          ➖ Registrar gasto
+          <span className="text-xs font-semibold text-rojo/70">insumos, transporte, otros</span>
+        </Link>
+      )}
 
       {b && (
         <div className="grid grid-cols-2 gap-2">
-          <Cifra
-            etiqueta="Neto real"
-            valor={formatCOP(b.neto)}
-            destacado
-            nota="Todo lo que ha entrado, menos los premios de bingo ya pagados"
-          />
-          <Cifra etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} nota="Todo lo que ha entrado hoy" />
+          <Cifra etiqueta="Neto real" valor={formatCOP(neto)} destacado nota="Lo que se tiene: todo lo que entró menos los gastos" />
+          <Cifra etiqueta="Recaudo bruto" valor={formatCOP(b.bruto)} nota="Todo lo que ha entrado" />
+          <Cifra etiqueta="Gastos" valor={`− ${formatCOP(totalGastos)}`} tono="rojo" nota="Premios, insumos, transporte y otros" />
           <Cifra etiqueta="Meta" valor={formatCOP(b.meta)} nota="Lo que queremos recoger" />
           <Cifra
             etiqueta="Avance"
@@ -191,9 +216,9 @@ export default function Inicio() {
             nota="Lo que ve el público en el termómetro"
           />
           {metaCumplida ? (
-            <Cifra etiqueta="¡Meta cumplida! Excedente" valor={`+ ${formatCOP(b.excedente)}`} tono="verde" nota="Lo recogido por encima de la meta" />
+            <Cifra completo etiqueta="¡Meta cumplida! Excedente" valor={`+ ${formatCOP(neto - b.meta)}`} tono="verde" nota="Lo que se tiene por encima de la meta" />
           ) : (
-            <Cifra etiqueta="Faltante" valor={formatCOP(b.faltante)} nota="Lo que falta para la meta" />
+            <Cifra completo etiqueta="Faltante" valor={formatCOP(Math.max(0, b.meta - neto))} nota="Lo que falta para la meta" />
           )}
         </div>
       )}
@@ -239,6 +264,7 @@ export default function Inicio() {
                         : ''}
                   </span>
                 </div>
+                <LineaNeto ingreso={Number(bn.total)} gasto={gastosDe((g) => g.origen === 'banco' && g.banco_id === bn.banco_id)} />
                 {alerta && <div className="mt-1 text-xs font-bold text-rojo">⚠️ Vaya a recoger el dinero de este punto</div>}
               </li>
             );
@@ -253,8 +279,18 @@ export default function Inicio() {
                 {plural(porTipo(t).reduce((s, x) => s + Number(x.registros), 0), 'registro')}
                 {porTipo(t).map((x) => ` · ${MEDIOS[x.medio_pago]} ${formatCOP(x.total)}`).join('')}
               </div>
+              <LineaNeto ingreso={sumaTipo(t)} gasto={gastosDe((g) => g.origen === t)} />
             </li>
           ))}
+          {gastosVarios > 0 && (
+            <li className="py-2" style={{ order: 1 }}>
+              <div className="flex items-baseline justify-between">
+                <span className="font-bold">Gastos varios</span>
+                <span className="tabular shrink-0 text-base font-black text-rojo sm:text-lg">− {formatCOP(gastosVarios)}</span>
+              </div>
+              <div className="text-xs text-marino/70">Gastos sin un punto definido</div>
+            </li>
+          )}
         </ul>
       </Tarjeta>
 
